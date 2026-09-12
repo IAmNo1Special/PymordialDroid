@@ -1,0 +1,52 @@
+[project]
+name = "pymordialdroid"
+version = "0.1.0"
+description = "PymordialDroid: Android device fleet automation using Scrcpy and ADB"
+readme = "README.md"
+authors = [
+    { name = "IAmNo1Special", email = "ivmno1special@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "adb-shell[usb]>=0.4.4",
+    "aiofiles>=25.1.0",
+    "async-timeout>=5.0.1",
+    "numpy>=2.4.1",
+    "opencv-python-headless>=4.13.0.90",
+    "pillow>=12.1.0",
+    "psutil>=7.2.1",
+    "pydantic>=2.12.5",
+    "pymordial>=0.4.1",
+    "pytesseract>=0.3.13",
+    "python-dotenv>=1.2.1",
+    "rich>=14.3.1",
+]
+
+[project.scripts]
+pymordialdroid = "pymordialdroid:main"
+
+[project.entry-points."pymordial.plugins"]
+adb = "pymordialdroid.devices.adb_device:AdbDevice"
+ui = "pymordialdroid.devices.ui_device:AndroidUiDevice"
+scrcpy = "pymordialdroid.devices.scrcpy_device:ScrcpyDevice"
+ocr = "pymordialdroid.devices.tesseract_device:TesseractDevice"
+
+[build-system]
+requires = ["uv_build>=0.11.2,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.0",
+    "pytest-mock>=3.14.0",
+    "ruff>=0.9.0",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP"]
+ignore = ["E501"]
+
