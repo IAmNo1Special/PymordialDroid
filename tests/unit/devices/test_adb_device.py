@@ -37,8 +37,7 @@ def test_adb_device_get_launch_activity(mocker):
         return_value="priority=0 preferredOrder=0 match=0x108000 specific=false\ncom.example.game/.MainActivity",
     )
     assert (
-        adb.get_launch_activity("com.example.game")
-        == "com.example.game/.MainActivity"
+        adb.get_launch_activity("com.example.game") == "com.example.game/.MainActivity"
     )
 
 

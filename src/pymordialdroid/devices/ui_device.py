@@ -197,11 +197,13 @@ class AndroidUiDevice(PymordialVisionDevice):
         set_position: bool = False,
         set_size: bool = False,
         wait_time: float = 0.5,
+        pymordial_screenshot: bytes | np.ndarray | None = None,
     ) -> tuple[int, int] | None:
         """Finds (center_x, center_y) coordinates of a UI element on screen."""
+        target_screen = screenshot if screenshot is not None else pymordial_screenshot
         if isinstance(element, PymordialPixel):
             if self.check_pixel_color(
-                pymordial_pixel=element, pymordial_screenshot=screenshot
+                pymordial_pixel=element, pymordial_screenshot=target_screen
             ):
                 return (int(element.position[0]), int(element.position[1]))
             return None
@@ -226,7 +228,7 @@ class AndroidUiDevice(PymordialVisionDevice):
         confidence = getattr(element, "confidence", 0.8)
 
         for attempt in range(max_tries):
-            screen_data = self._ensure_screenshot(screenshot)
+            screen_data = self._ensure_screenshot(target_screen)
             if screen_data is None:
                 if attempt < max_tries - 1:
                     time.sleep(wait_time)
@@ -298,11 +300,13 @@ class AndroidUiDevice(PymordialVisionDevice):
         elements: list[PymordialElement],
         screenshot: bytes | np.ndarray | None = None,
         max_tries: int = 1,
+        pymordial_screenshot: bytes | np.ndarray | None = None,
     ) -> tuple[int, int] | None:
         """Finds the coordinates of the first matching element from a list."""
+        target_screen = screenshot if screenshot is not None else pymordial_screenshot
         for element in elements:
             coords = self.where_element(
-                element, screenshot=screenshot, max_tries=max_tries
+                element, screenshot=target_screen, max_tries=max_tries
             )
             if coords is not None:
                 return coords

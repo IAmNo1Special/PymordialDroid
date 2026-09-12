@@ -8,9 +8,7 @@ from pymordialdroid.models import DeviceRecord
 
 def test_phone_and_fleet_controller_integration(tmp_path, mocker):
     """Phone and FleetCommander provide seamless access to AndroidController."""
-    rec = DeviceRecord(
-        serial="192.168.1.50:5555", ip="192.168.1.50", name="Device1"
-    )
+    rec = DeviceRecord(serial="192.168.1.50:5555", ip="192.168.1.50", name="Device1")
     phone = Phone(
         record=rec,
         signer=mocker.MagicMock(),

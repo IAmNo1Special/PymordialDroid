@@ -65,7 +65,9 @@ def example_explicit_adb_connection(ip: str, port: int = 5555) -> AdbDevice | No
     return device
 
 
-def example_controller_lazy_connect(ip: str, port: int = 5555) -> AndroidController | None:
+def example_controller_lazy_connect(
+    ip: str, port: int = 5555
+) -> AndroidController | None:
     """Use AndroidController, which auto-connects on the first command."""
     controller = AndroidController(ip=ip, port=port, device_name="DemoPhone")
 

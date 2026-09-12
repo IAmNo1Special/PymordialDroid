@@ -18,3 +18,5 @@ evidence_*.mp4
 
 .pytest_cache/
 .ruff_cache/
+.agents/
+.kilo/
