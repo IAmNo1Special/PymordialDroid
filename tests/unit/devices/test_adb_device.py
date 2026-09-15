@@ -28,6 +28,69 @@ def test_adb_device_find_package(mocker):
     assert adb.find_package_by_keyword("nonexistent") is None
 
 
+def test_adb_device_find_package_prefers_component_match(mocker):
+    """Keyword equal to a dot-component must beat substring rivals.
+
+    Regression: 'settings' resolved to com.sec.usbsettings (shortest
+    substring) instead of com.android.settings on Samsung devices.
+    """
+    adb = AdbDevice(host="127.0.0.1", port=5555)
+    mocker.patch.object(
+        adb,
+        "run_command",
+        return_value=(
+            "package:com.sec.usbsettings\n"
+            "package:com.android.settings\n"
+            "package:com.samsung.android.setting.multisound"
+        ),
+    )
+    assert adb.find_package_by_keyword("settings") == "com.android.settings"
+    # Exact match still wins over everything.
+    assert adb.find_package_by_keyword("com.sec.usbsettings") == "com.sec.usbsettings"
+    # Pure substring fallback keeps working.
+    assert adb.find_package_by_keyword("multisound") == (
+        "com.samsung.android.setting.multisound"
+    )
+
+
+def test_adb_device_find_package_ignores_garbage_lines(mocker):
+    """Non-package lines (Samsung multi-user warnings) must not match."""
+    adb = AdbDevice(host="127.0.0.1", port=5555)
+    mocker.patch.object(
+        adb,
+        "run_command",
+        return_value=(
+            "Error: java.lang.SecurityException: Shell does not have permission\n"
+            "package:com.android.settings\n"
+            "some other noise\n"
+            "package:com.example.game"
+        ),
+    )
+    assert adb.find_package_by_keyword("settings") == "com.android.settings"
+    assert adb.find_package_by_keyword("SecurityException") is None
+    assert adb.find_package_by_keyword("noise") is None
+
+
+def test_adb_device_close_all_apps_skips_garbage_lines(mocker):
+    """close_all_apps must never force-stop a non-package line."""
+    adb = AdbDevice(host="127.0.0.1", port=5555)
+    stopped: list[str] = []
+
+    def fake_run(cmd: str, decode: bool = True):  # type: ignore[no-untyped-def]
+        if cmd == "pm list packages":
+            return (
+                "Error: java.lang.SecurityException: blah\n"
+                "package:com.app.one\n"
+                "package:com.keep.me"
+            )
+        stopped.append(cmd)
+        return "OK"
+
+    mocker.patch.object(adb, "run_command", side_effect=fake_run)
+    assert adb.close_all_apps(exclude=["com.keep.me"]) == 1
+    assert stopped == ["am force-stop com.app.one"]
+
+
 def test_adb_device_get_launch_activity(mocker):
     """Test launch activity resolution."""
     adb = AdbDevice(host="127.0.0.1", port=5555)

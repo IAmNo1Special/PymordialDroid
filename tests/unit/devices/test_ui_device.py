@@ -137,3 +137,25 @@ def test_ui_device_ocr_delegation():
     # 3. read_text
     lines = device.read_text(pymordial_screenshot=screen, case_sensitive=True)
     assert lines == ["Line 1", "Line 2"]
+
+
+def test_ui_device_read_text_preserves_case():
+    """read_text must return lines verbatim (no lowercasing).
+
+    Regression: the default path lowercased recognized text, breaking
+    callers that compare against original casing.
+    """
+    mock_ocr = MagicMock()
+    mock_ocr.extract_text.return_value = "Hello Greensboro\nUPPER lower\n"
+
+    device = AndroidUiDevice(ocr_device=mock_ocr)
+    screen = np.zeros((50, 50, 3), dtype=np.uint8)
+
+    assert device.read_text(pymordial_screenshot=screen) == [
+        "Hello Greensboro",
+        "UPPER lower",
+    ]
+    assert device.read_text(pymordial_screenshot=screen, case_sensitive=True) == [
+        "Hello Greensboro",
+        "UPPER lower",
+    ]
