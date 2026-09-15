@@ -42,8 +42,25 @@ Part of the Pymordial ecosystem, focused on Android device automation (physical 
 
 ### 1. Run via UV
 
+Launch the interactive Fleet Commander TUI:
+
 ```bash
 uv run pymordialdroid
+```
+
+Manage fleet inventory directly from the command line:
+
+```bash
+# List all registered devices
+uv run pymordialdroid list
+
+# Add or update a device
+uv run pymordialdroid add 172.20.8.50 --name "Galaxy S24 Ultra"
+uv run pymordialdroid add 172.20.8.50:5555 --pin 110516
+
+# Remove a device by IP, serial, or name
+uv run pymordialdroid remove 172.20.8.50
+uv run pymordialdroid rm "Galaxy S24 Ultra"
 ```
 
 Or run as module:
