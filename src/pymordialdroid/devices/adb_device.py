@@ -71,6 +71,31 @@ class AdbDevice(PymordialBridgeDevice):
             self._device = None
             return False
 
+    def ensure_cli_endpoint(self) -> bool:
+        """Registers this endpoint with the CLI adb server (`adb connect`).
+
+        Required before launching ``scrcpy`` binaries / live-stream helpers,
+        which shell out to ``adb.exe`` and cannot see pure-Python
+        :class:`AdbDeviceTcp` sockets. Best-effort: never raises.
+        """
+        import subprocess
+
+        try:
+            subprocess.run(
+                [
+                    str(self.system_config.adb_bin_path),
+                    "connect",
+                    f"{self.host}:{self.port}",
+                ],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
+            return True
+        except Exception:
+            return False
+
     def is_connected(self) -> bool:
         """Checks if ADB connection is currently active and responsive."""
         return self._device is not None and self._device.available
