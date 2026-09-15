@@ -40,6 +40,7 @@ class AdbDevice(PymordialBridgeDevice):
         self._device: AdbDeviceTcp | None = None
         self._latest_frame: bytes | None = None
         self._is_streaming: bool = False
+        self._frame_provider: Any = None
 
     def initialize(self, config: Any = None) -> None:
         """Initializes the ADB device plugin."""
@@ -51,7 +52,49 @@ class AdbDevice(PymordialBridgeDevice):
 
     # --- CONNECTION MANAGEMENT ---
 
-    def connect(self) -> bool:
+    def _try_auto_heal_tcpip(self) -> bool:
+        """Attempts to auto-heal synchronous ADB connection via CLI binary."""
+        import subprocess
+
+        adb_bin = str(self.system_config.adb_bin_path)
+        log.info(f"Attempting auto-heal for ADB device {self.host}:{self.port}...")
+        try:
+            if self.port != 5555:
+                endpoint = f"{self.host}:{self.port}"
+                subprocess.run(
+                    [adb_bin, "connect", endpoint],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                )
+                subprocess.run(
+                    [adb_bin, "-s", endpoint, "tcpip", "5555"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                )
+
+            subprocess.run(
+                [adb_bin, "connect", f"{self.host}:5555"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+
+            self.port = 5555
+            self._device = AdbDeviceTcp(self.host, 5555, default_transport_timeout_s=9)
+            self._device.connect(rsa_keys=[self.signer], auth_timeout_s=5)
+            log.info(f"Auto-healed ADB connection to {self.host}:5555")
+            return True
+        except Exception as e:
+            log.warning(f"AdbDevice auto-heal failed: {e}")
+            self._device = None
+            return False
+
+    def connect(self, auto_heal: bool = True) -> bool:
         """Connects to the Android device via TCP socket with RSA authentication."""
         log.debug(f"Connecting ADB device to {self.host}:{self.port}...")
         if self._device is None:
@@ -69,6 +112,8 @@ class AdbDevice(PymordialBridgeDevice):
         except Exception as e:
             log.warning(f"Error connecting to ADB device {self.host}:{self.port}: {e}")
             self._device = None
+            if auto_heal and self._try_auto_heal_tcpip():
+                return True
             return False
 
     def ensure_cli_endpoint(self) -> bool:
@@ -128,28 +173,58 @@ class AdbDevice(PymordialBridgeDevice):
 
     # --- ANDROID PACKAGE & ACTIVITY RESOLUTION ---
 
+    @staticmethod
+    def parse_package_list(output: str) -> list[str]:
+        """Extracts package names from `pm list packages` output.
+
+        Only ``package:``-prefixed lines are kept; device warnings (e.g.
+        Samsung multi-user ``SecurityException`` preambles) are ignored so
+        they can never match a keyword or be force-stopped.
+        """
+        packages = []
+        for line in output.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("package:"):
+                name = stripped[len("package:") :].strip()
+                if name:
+                    packages.append(name)
+        return packages
+
+    @staticmethod
+    def rank_package(keyword: str, packages: list[str]) -> str | None:
+        """Ranks packages for a keyword: exact > component > substring.
+
+        1. Case-insensitive exact match.
+        2. Keyword equals a dot-separated component (``settings`` matches
+           ``com.android.settings`` but not ``com.sec.usbsettings``);
+           ties break toward the shortest full name.
+        3. Plain substring match; ties break toward the shortest full name.
+        """
+        kw = keyword.lower()
+        for pkg in packages:
+            if pkg.lower() == kw:
+                return pkg
+        component = [p for p in packages if kw in p.lower().split(".")]
+        if component:
+            return min(component, key=len)
+        substring = [p for p in packages if kw in p.lower()]
+        if substring:
+            return min(substring, key=len)
+        return None
+
     def find_package_by_keyword(self, keyword: str) -> str | None:
         """Finds an installed package matching a keyword using 'pm list packages'."""
         output = self.run_command("pm list packages", decode=True)
         if not output or not isinstance(output, str):
             return None
 
-        packages = [
-            line.replace("package:", "").strip()
-            for line in output.splitlines()
-            if line.strip()
-        ]
+        packages = self.parse_package_list(output)
 
-        # 1. Exact match
+        # 1. Exact match (preserves historical fast path)
         if keyword in packages:
             return keyword
 
-        # 2. Case-insensitive substring match (shortest name wins)
-        matches = [pkg for pkg in packages if keyword.lower() in pkg.lower()]
-        if matches:
-            return min(matches, key=len)
-
-        return None
+        return self.rank_package(keyword, packages)
 
     def get_launch_activity(self, package_name: str) -> str | None:
         """Queries Android's activity manager to determine the exact launchable activity."""
@@ -277,11 +352,7 @@ class AdbDevice(PymordialBridgeDevice):
         if not output or not isinstance(output, str):
             return 0
 
-        packages = [
-            line.replace("package:", "").strip()
-            for line in output.splitlines()
-            if line.strip()
-        ]
+        packages = self.parse_package_list(output)
         exclude_list = exclude or []
         count = 0
 
@@ -377,8 +448,35 @@ class AdbDevice(PymordialBridgeDevice):
 
     # --- SCREENSHOT & STREAMING (Pure ADB, No PyAV) ---
 
+    def set_frame_provider(self, provider: Any | None) -> None:
+        """Sets an optional headless-feed frame provider.
+
+        The provider is a zero-arg callable returning PNG bytes (or None).
+        Typically ``ScrcpyDevice.get_latest_frame``. When set,
+        :meth:`capture_screenshot` tries it first for a high-FPS frame and
+        falls back to ``screencap -p`` on None/exception.
+        """
+        self._frame_provider = provider
+
+    def clear_frame_provider(self) -> None:
+        """Removes the headless-feed frame provider."""
+        self._frame_provider = None
+
     def capture_screenshot(self) -> bytes | None:
-        """Captures a PNG screenshot from the device using pure 'screencap -p'."""
+        """Captures a PNG screenshot, preferring the scrcpy headless feed.
+
+        Tries the frame provider first (fast path); falls back to pure
+        'screencap -p' so behavior never regresses when no feed is running.
+        """
+        if self._frame_provider is not None:
+            try:
+                frame = self._frame_provider()
+            except Exception as e:
+                log.debug(f"Frame provider failed, falling back to screencap: {e}")
+                frame = None
+            if frame:
+                self._latest_frame = frame
+                return frame
         if not self.is_connected():
             if not self.connect():
                 return None
