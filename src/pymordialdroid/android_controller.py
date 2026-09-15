@@ -120,7 +120,13 @@ class AndroidController(PymordialController):
     # --- PymordialController Abstract Implementations ---
 
     def capture_screen(self) -> bytes | None:
-        """Captures the current screen from the device."""
+        """Captures the current screen, preferring live stream, then feed."""
+        try:
+            frame = self.scrcpy.get_latest_frame()
+            if frame:
+                return frame
+        except Exception:
+            pass
         return self.bridge.capture_screenshot()
 
     def click_coord(self, coords: tuple[int, int], times: int = 1) -> bool:
@@ -317,13 +323,158 @@ class AndroidController(PymordialController):
         """Types text on the device."""
         return self.bridge.type_text(text, enter=enter)
 
-    def open_viewer(self, rank: int = 0, ghost: bool = False) -> bool:
-        """Opens scrcpy viewer window."""
-        return self.scrcpy.open(rank=rank, ghost=ghost)
+    def open_viewer(
+        self,
+        rank: int = 0,
+        ghost: bool = False,
+        new_display: str | None = None,
+        start_app: str | None = None,
+        show_touches: bool = False,
+    ) -> bool:
+        """Opens scrcpy viewer window (optionally on a virtual display)."""
+        return self.scrcpy.open(
+            rank=rank,
+            ghost=ghost,
+            new_display=new_display,
+            start_app=start_app,
+            show_touches=show_touches,
+        )
+
+    def open_virtual_display(
+        self,
+        rank: int = 0,
+        display: str = "1920x1080",
+        start_app: str | None = None,
+    ) -> bool:
+        """Opens a viewer on an isolated virtual display (Android 10+)."""
+        return self.scrcpy.open_virtual_display(
+            rank=rank, display=display, start_app=start_app
+        )
 
     def close_viewer(self) -> bool:
         """Closes scrcpy viewer window."""
         return self.scrcpy.close()
+
+    # --- Headless recording (Feature 2) ---
+
+    def start_recording(
+        self,
+        output_path: str | Path | None = None,
+        show_touches: bool = False,
+        time_limit: int | None = None,
+        record_orientation: int | None = None,
+    ) -> Path | None:
+        """Starts headless MP4 evidence recording (no window)."""
+        return self.scrcpy.start_recording(
+            output_path=output_path,
+            show_touches=show_touches,
+            time_limit=time_limit,
+            record_orientation=record_orientation,
+        )
+
+    def stop_recording(self) -> Path | None:
+        """Stops headless recording, returning the output path (if any)."""
+        return self.scrcpy.stop_recording()
+
+    def is_recording(self) -> bool:
+        """Checks if headless recording is running."""
+        return self.scrcpy.is_recording()
+
+    # --- Headless live feed (Feature 1) ---
+
+    def start_headless_feed(
+        self,
+        output_path: str | Path | None = None,
+        max_size: int = 1024,
+        max_fps: int = 30,
+        bit_rate: str = "2M",
+        new_display: str | None = None,
+        start_app: str | None = None,
+        timeout: float = 30.0,
+    ) -> bool:
+        """Starts a headless live stream and routes screenshots through it.
+
+        Delegates to the live stream (direct scrcpy-server H.264 via PyAV).
+        The legacy MKV file feed was removed because scrcpy cannot decode
+        frames without a display surface when ``--no-window`` is used.
+        """
+        ok = self.scrcpy.start_headless_feed(
+            output_path=output_path,
+            max_size=max_size,
+            max_fps=max_fps,
+            bit_rate=bit_rate,
+            new_display=new_display,
+            start_app=start_app,
+            timeout=timeout,
+        )
+        if ok and hasattr(self.bridge, "set_frame_provider"):
+            try:
+                self.bridge.set_frame_provider(self.scrcpy.get_latest_frame)
+            except Exception:
+                pass
+        return ok
+
+    def stop_headless_feed(self) -> bool:
+        """Stops the headless feed and restores plain screencap captures."""
+        if hasattr(self.bridge, "clear_frame_provider"):
+            try:
+                # Only clear if the live stream is not still providing frames.
+                if not self.scrcpy.is_live_running():
+                    self.bridge.clear_frame_provider()
+            except Exception:
+                pass
+        return self.scrcpy.stop_headless_feed()
+
+    def get_latest_frame(self) -> bytes | None:
+        """Returns the latest headless-feed frame (or None if unavailable)."""
+        try:
+            return self.scrcpy.get_latest_frame()
+        except Exception:
+            return None
+
+    # --- Sub-100ms live stream ---
+
+    def start_live_stream(
+        self,
+        max_size: int = 960,
+        bit_rate: str | int = "2M",
+        max_fps: float | None = 30,
+        new_display: str | None = None,
+        timeout: float = 20.0,
+    ) -> bool:
+        """Starts a direct H.264 live stream and routes screenshots through it."""
+        ok = self.scrcpy.start_live_stream(
+            max_size=max_size,
+            bit_rate=bit_rate,
+            max_fps=max_fps,
+            new_display=new_display,
+            timeout=timeout,
+        )
+        if ok and hasattr(self.bridge, "set_frame_provider"):
+            try:
+                self.bridge.set_frame_provider(self.scrcpy.get_latest_frame)
+            except Exception:
+                pass
+        return ok
+
+    def stop_live_stream(self) -> bool:
+        """Stops the live stream and restores plain screencap captures."""
+        if hasattr(self.bridge, "clear_frame_provider"):
+            try:
+                # Only clear if no other feed is still providing frames.
+                if not self.scrcpy.is_feed_running():
+                    self.bridge.clear_frame_provider()
+            except Exception:
+                pass
+        return self.scrcpy.stop_live_stream()
+
+    def is_live_running(self) -> bool:
+        """Checks if the sub-100ms live stream is running."""
+        return self.scrcpy.is_live_running()
+
+    def get_live_stats(self) -> dict:
+        """Returns live-stream latency measurements (age_ms, fps, ...)."""
+        return self.scrcpy.get_live_stats()
 
     def unlock_device(self, pin: str | None = None) -> None:
         """Unlocks device screen with PIN."""
