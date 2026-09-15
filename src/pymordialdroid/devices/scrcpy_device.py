@@ -1,13 +1,18 @@
 """Scrcpy host runner managing display streaming, ghost mode, and physical screen controls."""
 
+from __future__ import annotations
+
 import logging
 import os
 import subprocess
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pymordialdroid.config import SystemConfig, get_default_pin, resolve_system_config
 from pymordialdroid.window import WindowLayoutConfig, get_viewer_window_title
+
+if TYPE_CHECKING:
+    from pymordialdroid.devices.adb_device import AdbDevice
 
 log = logging.getLogger("pymordialdroid")
 
@@ -23,6 +28,7 @@ class ScrcpyDevice:
 
     def __init__(
         self,
+        bridge_adb: AdbDevice,
         ip: str = "127.0.0.1",
         port: int = 5555,
         device_name: str = "AndroidDevice",
@@ -30,6 +36,7 @@ class ScrcpyDevice:
         system_config: SystemConfig | None = None,
         layout_config: WindowLayoutConfig | None = None,
     ) -> None:
+        self._bridge_adb = bridge_adb
         self.ip = ip
         self.port = port
         self.device_name = device_name
@@ -48,6 +55,14 @@ class ScrcpyDevice:
         """Terminates active scrcpy process."""
         self.close()
 
+    def set_bridge_device(self, bridge: AdbDevice) -> None:
+        """Injects/replaces the ADB bridge (plugin wiring)."""
+        self._bridge_adb = bridge
+
+    def _ensure_adb_endpoint(self) -> None:
+        """Registers the endpoint with the CLI adb server for scrcpy binaries."""
+        self._bridge_adb.ensure_cli_endpoint()
+
     def open(
         self,
         rank: int = 0,
@@ -65,20 +80,7 @@ class ScrcpyDevice:
         else:
             self._ghost_mode = False
 
-        # Ensure ADB daemon knows the network endpoint
-        try:
-            subprocess.run(
-                [
-                    str(self.system_config.adb_bin_path),
-                    "connect",
-                    f"{self.ip}:{self.port}",
-                ],
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except Exception:
-            pass
+        self._ensure_adb_endpoint()
 
         env = os.environ.copy()
         env["ADB"] = str(self.system_config.adb_bin_path)
@@ -146,37 +148,27 @@ class ScrcpyDevice:
 
     def toggle_power(self) -> None:
         """Wakes the physical screen via power button event."""
-        cmd = [
-            str(self.system_config.adb_bin_path),
-            "-s",
-            f"{self.ip}:{self.port}",
-            "shell",
-            "input",
-            "keyevent",
-            "26",
-        ]
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self._bridge_adb.run_command("input keyevent 26")
 
     def unlock_device(self, pin: str | None = None) -> None:
         """Wakes screen and inputs PIN if locked."""
         resolved_pin = pin or self.pin or get_default_pin()
-        adb = str(self.system_config.adb_bin_path)
-        target = f"{self.ip}:{self.port}"
 
         # 1. Wake
-        subprocess.run([adb, "-s", target, "shell", "input", "keyevent", "26"])
+        self._bridge_adb.run_command("input keyevent 26")
         time.sleep(0.5)
 
         # 2. Dismiss swipe
-        subprocess.run([adb, "-s", target, "shell", "input", "keyevent", "82"])
+        self._bridge_adb.run_command("input keyevent 82")
         time.sleep(0.5)
 
         # 3. Enter PIN
-        subprocess.run([adb, "-s", target, "shell", "input", "text", resolved_pin])
+        # (numeric PIN needs no shell quoting)
+        self._bridge_adb.run_command(f"input text {resolved_pin}")
         time.sleep(0.2)
 
         # 4. Enter
-        subprocess.run([adb, "-s", target, "shell", "input", "keyevent", "66"])
+        self._bridge_adb.run_command("input keyevent 66")
 
 
 __all__ = [

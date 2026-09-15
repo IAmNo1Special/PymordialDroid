@@ -73,15 +73,21 @@ class AndroidController(PymordialController):
         )
 
         # 4. Resolve Scrcpy Device
+        def configure_scrcpy(plugin: PymordialPlugin) -> None:
+            if hasattr(plugin, "set_bridge_device"):
+                plugin.set_bridge_device(self.adb)
+
         self.scrcpy: ScrcpyDevice = self._resolve_plugin(
             "scrcpy",
             lambda: ScrcpyDevice(
+                bridge_adb=self.adb,
                 ip=self.ip,
                 port=self.port,
                 device_name=self.device_name,
                 pin=self.pin,
                 system_config=self.system_config,
             ),
+            configure_found_plugin=configure_scrcpy,
         )
 
         # Link controller to all registered apps
