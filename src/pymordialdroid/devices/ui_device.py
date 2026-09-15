@@ -356,17 +356,19 @@ class AndroidUiDevice(PymordialVisionDevice):
         case_sensitive: bool = False,
         strategy: PymordialExtractStrategy | None = None,
     ) -> list[str]:
-        """Reads text lines from the screen using the OCR device."""
+        """Reads text lines from the screen using the OCR device.
+
+        Lines are always returned verbatim as recognized; ``case_sensitive``
+        is accepted for signature compatibility but no longer mutates the
+        output (case-insensitive *matching* belongs in :meth:`check_text`).
+        """
         screenshot = self._ensure_screenshot(pymordial_screenshot)
         if screenshot is None:
             return []
 
         try:
             text = self._ocr_device.extract_text(screenshot, strategy=strategy)
-            lines = [line.strip() for line in text.split("\n") if line.strip()]
-            if case_sensitive:
-                return lines
-            return [line.lower() for line in lines]
+            return [line.strip() for line in text.split("\n") if line.strip()]
         except Exception as e:
             log.error(f"Error reading text: {e}")
             return []
