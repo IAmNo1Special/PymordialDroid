@@ -11,6 +11,7 @@ dependencies = [
     "adb-shell[usb]>=0.4.4",
     "aiofiles>=25.1.0",
     "async-timeout>=5.0.1",
+    "av>=18.1.0",
     "numpy>=2.4.1",
     "opencv-python-headless>=4.13.0.90",
     "pillow>=12.1.0",
