@@ -1,7 +1,29 @@
-# PymordialDroid — Fleet Commander & Android Automation Guide
+---
+type: Architecture Guide
+title: PymordialDroid — Automation Architecture & System Overview
+description: High-level host architecture, bundled binary resolution, wireless ADB networking, and Pymordial contract implementations.
+resource: src/pymordialdroid
+tags: [android, architecture, adb, scrcpy, networking, pymordial]
+status: stable
+generated:
+  by: human:IAmNo1Special
+  at: 2026-09-16T05:15:00Z
+verified:
+  - by: human:IAmNo1Special
+    at: 2026-09-16T05:15:00Z
+sources:
+  - id: scrcpy
+    resource: https://github.com/Genymobile/scrcpy
+    title: Genymobile scrcpy
+  - id: adb
+    resource: https://developer.android.com/tools/adb
+    title: Android Debug Bridge (ADB)
+---
+
+# PymordialDroid — Automation Architecture & System Overview
 
 > [!NOTE]
-> This technical guide documents the host-side infrastructure, wireless ADB networking, `scrcpy` display streaming, and the `PymordialDroid` Fleet Commander automation stack.
+> This guide documents the host-side infrastructure, wireless ADB networking, process orchestration, and Pymordial contract implementation. For configuration files and layouts, see [Configuration Reference](./configuration.md). For video streaming, see [Display Streaming](./display_streaming.md). For low-level input, see [Touch Injection](./touch_injection.md). For recorded fieldwork gaps, see [Issues Tracker](./issues.md).
 
 ---
 
@@ -11,7 +33,7 @@
 graph LR
     subgraph Host["PC / Steam Deck (Windows 11)"]
         Commander["PymordialDroid (FleetCommander TUI)"]
-        Scrcpy["scrcpy 3.3.4 (Direct3D 11 Renderer)"]
+        Scrcpy["scrcpy 4.1 (Direct3D 11 Renderer)"]
         ADBClient["adb.exe (Bundled inside bin/scrcpy)"]
     end
     subgraph Transport["Local Wi-Fi / USB Network"]
@@ -36,8 +58,8 @@ graph LR
 The automation suite bundles `scrcpy` and `adb` inside `src/pymordialdroid/bin/scrcpy/`:
 
 * **ADB Executable**: `src/pymordialdroid/bin/scrcpy/adb.exe` (Version 36.0.0-13206524 / 1.0.41)
-* **Scrcpy Executable**: `src/pymordialdroid/bin/scrcpy/scrcpy.exe` (Version 3.3.4)
-* **Scrcpy Server**: `src/pymordialdroid/bin/scrcpy/scrcpy-server`
+* **Scrcpy Executable**: `src/pymordialdroid/bin/scrcpy/scrcpy.exe` (Version 4.1 / SDL 3.4.12)
+* **Scrcpy Server**: `src/pymordialdroid/bin/scrcpy/scrcpy-server` (Version 4.1)
 
 Both binaries are dynamically resolved in `FleetCommander.__init__`:
 ```python
@@ -53,47 +75,9 @@ self.config = SystemConfig(
 
 ---
 
-## 3. Configuration & State Management (`~/.pymordialdroid/`)
+## 3. Wireless ADB Pairing & Persistent Port Configuration
 
-All dynamic runtime data and user configuration are kept out of the source code and stored in the user directory `~/.pymordialdroid/` (`%USERPROFILE%\.pymordialdroid` on Windows):
-
-### 3.1 Global Configuration (`config.json`)
-Located at `~/.pymordialdroid/config.json`:
-```json
-{
-    "default_pin": "110516",
-    "adb_path": null,
-    "scrcpy_path": null
-}
-```
-
-PIN Resolution Order:
-1. Per-device `pin` in `fleet_inventory.json` (if specified)
-2. Environment variable `DEVICE_PIN` or `PYMORDIALDROID_PIN`
-3. `default_pin` in `~/.pymordialdroid/config.json`
-4. Default fallback `"1234"`
-
-### 3.2 Fleet Inventory (`fleet_inventory.json`)
-Located at `~/.pymordialdroid/fleet_inventory.json`:
-```json
-[
-    {
-        "serial": "172.20.8.50:5555",
-        "ip": "172.20.8.50",
-        "port": 5555,
-        "name": "Galaxy S24 Ultra"
-    }
-]
-```
-
-### 3.3 Viewer Layout (`viewer_layout.json`)
-Tracks currently open scrcpy viewers so window arrangements and sessions can be restored across restarts. Located at `~/.pymordialdroid/viewer_layout.json`.
-
----
-
-## 4. Wireless ADB Pairing & Persistent Port Configuration
-
-### 4.1 Initial Wireless Pairing (TLS)
+### 3.1 Initial Wireless Pairing (TLS)
 On Android 11+, Google uses TLS for the initial Wireless Debugging handshake:
 1. From the device's "Pair device with pairing code" menu:
    ```bash
@@ -101,7 +85,7 @@ On Android 11+, Google uses TLS for the initial Wireless Debugging handshake:
    ```
 2. Keys are authenticated and persisted in `~/.android/adbkey` and `~/.android/adb_known_hosts.pb`.
 
-### 4.2 Persistent Port 5555 Transition
+### 3.2 Persistent Port 5555 Transition
 Dynamic wireless debugging ports change on every reboot or Wi-Fi reconnect, and use `STLS` handshakes which pure-Python `adb_shell` cannot negotiate. To make connections permanent and compatible with all Python drivers:
 ```bash
 adb connect <IP>:<DYNAMIC_PORT>
@@ -112,7 +96,7 @@ This restarts the Android system ADB daemon on port **5555** with standard RSA t
 
 ---
 
-## 5. TUI & Fleet Management
+## 4. TUI & Fleet Management
 
 Run PymordialDroid using `uv`:
 ```bash
@@ -124,7 +108,7 @@ Or run as a module:
 uv run python -m pymordialdroid
 ```
 
-### 5.1 Features Matrix
+### Features Matrix
 * **[1] Add Devices**: Performs synchronous USB scans or subnet sweeps to auto-discover phones, run `tcpip 5555`, and extract IP addresses via `ip route`.
 * **[2] Launch Viewer(s)**: Spawns `scrcpy.exe` with grid layout positioning, `--no-audio`, and optional `--turn-screen-off` (ghost mode to save battery).
 * **[3] Organize Windows**: Uses Win32 API (`user32.MoveWindow`) to auto-tile active viewers across multiple displays.
@@ -135,7 +119,7 @@ uv run python -m pymordialdroid
 
 ---
 
-## 6. Pymordial Contract Implementation
+## 5. Pymordial Contract Implementation
 
 PymordialDroid implements the core abstract interfaces defined by `Pymordial` (`D:\projects\Pymordial`), providing full interoperability with Pymordial's plugin and app state machine system.
 
@@ -197,40 +181,21 @@ classDiagram
     PymordialDroidController *-- PymordialScrcpyDevice
 ```
 
-### 6.1 Core Classes & Roles
-
+### Core Classes & Roles
 1. **`PymordialAdbDevice` (`pymordialdroid.devices.adb_device`)**:
    - Implements `PymordialBridgeDevice`.
-   - Replaced BlueStacks ADB implementation and stripped `PyAV` (since video is handled natively by `scrcpy`).
    - Supports pure-Python `adb_shell` over wireless port 5555 with automatic RSA key generation (`~/.android/adbkey`), falling back to CLI `adb.exe` if needed.
    - Provides Android package discovery (`find_package_by_keyword`), launch activity resolution (`get_launch_activity`), and focused window detection (`get_focused_app`).
-   - Re-exported as `PymordialDroidBridgeDevice` for backwards compatibility.
-
 2. **`PymordialDroidUiDevice` (`pymordialdroid.devices.ui_device`)**:
    - Implements `PymordialVisionDevice`.
    - Uses OpenCV template matching (`matchTemplate` with `TM_CCOEFF_NORMED`) for `PymordialImage` queries.
    - Takes screenshots on-demand via ADB bridge (`screencap -p`).
-   - Supports pixel color verification for `PymordialPixel`.
-
 3. **`PymordialScrcpyDevice` (`pymordialdroid.devices.scrcpy_device`)**:
    - Implements `PymordialDisplayDevice`.
    - Manages background and foreground `scrcpy` subprocess instances.
-   - Supports screen wake, PIN entry unlock, and ghost mode (`--turn-screen-off`).
-
 4. **`PymordialDroidController` (`pymordialdroid.droid_controller`)**:
    - Implements `PymordialController`.
-   - Dynamically resolves and mounts bridge (`adb`), vision (`ui`), and display (`scrcpy`) devices via `PluginRegistry` or direct dependency injection.
-
+   - Dynamically resolves and mounts bridge (`adb`), vision (`ui`), and display (`scrcpy`) devices.
 5. **`PymordialAndroidApp` (`pymordialdroid.android_app`)**:
    - Extends `PymordialApp`.
-   - Provides concrete implementations of `launch()`, `stop()`, `restart()`, `reset_cache()`, `is_running()`, `is_installed()`, and `uninstall()` using the ADB bridge.
-   - Maintains full Pymordial state machine transitions (`INSTALLED`, `NOT_INSTALLED`, `RUNNING`, `STOPPED`, `SUSPENDED`).
-
-### 6.2 Plugin Entry Points
-
-The plugins are registered in `pyproject.toml` under `[project.entry-points."pymordial.plugins"]`:
-* `adb`: `PymordialAdbDevice`
-* `droid_bridge`: `PymordialAdbDevice`
-* `droid_ui`: `PymordialDroidUiDevice`
-* `droid_scrcpy`: `PymordialScrcpyDevice`
-
+   - Manages app lifecycle (`launch`, `stop`, `restart`, `uninstall`) and state transitions.
