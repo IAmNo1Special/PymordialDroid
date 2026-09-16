@@ -95,4 +95,4 @@ Configuration files are located at `%USERPROFILE%\.pymordialdroid\` on Windows (
 - `fleet_inventory.json`: Device records (serial, IP, port, custom name).
 - `viewer_layout.json`: Open viewer states for session restoration.
 
-For full architecture and setup documentation, see [.agents/knowledge/pymordialdroid_automation_stack.md](.agents/knowledge/pymordialdroid_automation_stack.md).
+For full architecture and setup documentation, see the [PymordialDroid Architecture Guide](.agents/knowledge/pymordialdroid/architecture.md) or explore the [knowledge base index](.agents/knowledge/index.md).
