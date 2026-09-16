@@ -32,6 +32,8 @@ class AndroidController(PymordialController):
         pin: str | None = None,
         apps: list[AndroidApp] | None = None,
         system_config: SystemConfig | None = None,
+        touch_input_width: int | None = None,
+        touch_input_height: int | None = None,
     ) -> None:
         super().__init__(apps=apps)  # type: ignore[arg-type]
         self.ip = ip
@@ -49,6 +51,8 @@ class AndroidController(PymordialController):
                 host=self.ip,
                 port=self.port,
                 system_config=self.system_config,
+                touch_input_width=touch_input_width,
+                touch_input_height=touch_input_height,
             ),
         )
         self.bridge: AdbDevice = self.adb
@@ -152,6 +156,48 @@ class AndroidController(PymordialController):
             end_x=end_x,
             end_y=end_y,
             duration=duration,
+        )
+
+    # --- Low-level touch injection (sendevent; thin delegation) ---
+
+    @property
+    def touch_available(self) -> bool:
+        """True when low-level sendevent injection is usable on the device."""
+        return self.bridge.touch_available
+
+    def touch_down(self, x: float, y: float, slot: int = 0) -> bool:
+        """Presses a contact down at (x, y) on the given multi-touch slot."""
+        return self.bridge.touch_down(x, y, slot=slot)
+
+    def touch_move(self, x: float, y: float, slot: int = 0) -> bool:
+        """Moves an already-down contact to (x, y) on the given slot."""
+        return self.bridge.touch_move(x, y, slot=slot)
+
+    def touch_up(self, slot: int = 0) -> bool:
+        """Lifts the contact on the given slot."""
+        return self.bridge.touch_up(slot=slot)
+
+    def touch_hold(self, x: float, y: float, duration_ms: int, slot: int = 0) -> bool:
+        """Holds a contact down at (x, y) for ``duration_ms``, then releases."""
+        return self.bridge.touch_hold(x, y, duration_ms, slot=slot)
+
+    def held_touch(self, x: float, y: float, slot: int = 0):  # type: ignore[no-untyped-def]
+        """Context manager holding a contact down for the block's duration."""
+        return self.bridge.held_touch(x, y, slot=slot)
+
+    def precise_drag(
+        self,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        steps: int = 24,
+        step_delay_ms: int = 16,
+        slot: int = 0,
+    ) -> bool:
+        """Drags (x1, y1) -> (x2, y2) emitting ``steps`` interpolated moves."""
+        return self.bridge.precise_drag(
+            x1, y1, x2, y2, steps=steps, step_delay_ms=step_delay_ms, slot=slot
         )
 
     def find_element(

@@ -3,6 +3,11 @@
 from pymordialdroid.devices.adb_device import AdbDevice
 from pymordialdroid.devices.scrcpy_device import ScrcpyDevice
 from pymordialdroid.devices.tesseract_device import TesseractDevice
+from pymordialdroid.devices.touch_injector import (
+    TouchDeviceInfo,
+    TouchInjector,
+    TouchMapper,
+)
 from pymordialdroid.devices.ui_device import AndroidUiDevice
 
 __all__ = [
@@ -10,4 +15,7 @@ __all__ = [
     "AndroidUiDevice",
     "ScrcpyDevice",
     "TesseractDevice",
+    "TouchDeviceInfo",
+    "TouchInjector",
+    "TouchMapper",
 ]

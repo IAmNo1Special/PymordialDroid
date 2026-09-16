@@ -11,6 +11,7 @@ from adb_shell.auth.sign_pythonrsa import PythonRSASigner
 from pymordial.core.blueprints.bridge_device import PymordialBridgeDevice
 
 from pymordialdroid.config import SystemConfig, resolve_system_config
+from pymordialdroid.devices.touch_injector import TouchInjector
 
 log = logging.getLogger("pymordialdroid")
 
@@ -31,6 +32,8 @@ class AdbDevice(PymordialBridgeDevice):
         port: int = 5555,
         signer: PythonRSASigner | None = None,
         system_config: SystemConfig | None = None,
+        touch_input_width: int | None = None,
+        touch_input_height: int | None = None,
     ) -> None:
         self.host = host
         self.port = port
@@ -41,6 +44,14 @@ class AdbDevice(PymordialBridgeDevice):
         self._latest_frame: bytes | None = None
         self._is_streaming: bool = False
         self._frame_provider: Any = None
+
+        # Low-level touch injection (sendevent). Coordinates passed to the
+        # touch_* API use the same input space as tap()/swipe() (the display's
+        # current input space, e.g. 2340x1080 landscape for Revomon Novus).
+        # When None, the input space is auto-detected (dumpsys -> wm size).
+        self._touch_input_width = touch_input_width
+        self._touch_input_height = touch_input_height
+        self._touch_injector: TouchInjector | None = None
 
     def initialize(self, config: Any = None) -> None:
         """Initializes the ADB device plugin."""
@@ -411,6 +422,89 @@ class AdbDevice(PymordialBridgeDevice):
             f"input swipe {start_x} {start_y} {end_x} {end_y} {duration}"
         )
         return res is not None
+
+    # --- LOW-LEVEL TOUCH INJECTION (sendevent) ---
+
+    def _touch(self) -> TouchInjector:
+        """Lazily creates the sendevent touch injector for this device."""
+        if self._touch_injector is None:
+            self._touch_injector = TouchInjector(
+                self.run_command,
+                input_width=self._touch_input_width,
+                input_height=self._touch_input_height,
+            )
+        return self._touch_injector
+
+    @property
+    def touch_available(self) -> bool:
+        """True when low-level sendevent injection is usable on the device."""
+        return self._touch().available
+
+    def touch_down(self, x: float, y: float, slot: int = 0) -> bool:
+        """Presses a contact down at (x, y) on the given multi-touch slot.
+
+        Coordinates use the same input space as :meth:`tap`/:meth:`swipe`.
+        Returns False when sendevent injection is unavailable (no fallback —
+        a bare down has no ``input`` equivalent).
+        """
+        return self._touch().touch_down(x, y, slot=slot)
+
+    def touch_move(self, x: float, y: float, slot: int = 0) -> bool:
+        """Moves an already-down contact to (x, y) on the given slot."""
+        return self._touch().touch_move(x, y, slot=slot)
+
+    def touch_up(self, slot: int = 0) -> bool:
+        """Lifts the contact on the given slot."""
+        return self._touch().touch_up(slot=slot)
+
+    def touch_hold(self, x: float, y: float, duration_ms: int, slot: int = 0) -> bool:
+        """Holds a contact down at (x, y) for ``duration_ms``, then releases.
+
+        Falls back to an ``input swipe`` long-press (same start/end point)
+        when sendevent injection is unavailable.
+        """
+        injector = self._touch()
+        if injector.available:
+            return injector.touch_hold(x, y, duration_ms, slot=slot)
+        log.warning(
+            "touch injection unavailable; falling back to input swipe long-press"
+        )
+        return self.swipe(int(x), int(y), int(x), int(y), duration=duration_ms)
+
+    def held_touch(self, x: float, y: float, slot: int = 0):  # type: ignore[no-untyped-def]
+        """Context manager holding a contact down for the block's duration.
+
+        Enables two-thumb play: hold the joystick on slot 0 while issuing
+        ``touch_move`` / ``precise_drag`` on slot 1. Always releases on exit.
+        """
+        return self._touch().held_touch(x, y, slot=slot)
+
+    def precise_drag(
+        self,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        steps: int = 24,
+        step_delay_ms: int = 16,
+        slot: int = 0,
+    ) -> bool:
+        """Drags (x1, y1) -> (x2, y2) emitting ``steps`` interpolated moves.
+
+        The fine-control primitive: unlike :meth:`swipe` (one coarse kernel
+        swipe), the dense move-event stream lets games that gate on drag
+        distance/velocity register small, precise drags. Falls back to
+        :meth:`swipe` when sendevent injection is unavailable.
+        """
+        injector = self._touch()
+        if injector.available:
+            return injector.precise_drag(
+                x1, y1, x2, y2, steps=steps, step_delay_ms=step_delay_ms, slot=slot
+            )
+        log.warning("touch injection unavailable; falling back to input swipe")
+        return self.swipe(
+            int(x1), int(y1), int(x2), int(y2), duration=steps * step_delay_ms
+        )
 
     def type_text(self, text: str, enter: bool = False) -> bool:
         """Types text into the focused input field, escaping shell characters."""
