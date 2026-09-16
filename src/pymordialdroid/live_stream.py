@@ -1,8 +1,8 @@
 """Direct scrcpy-server video client for sub-100ms screen frames.
 
-The bundled ``scrcpy`` binary (3.3.x) no longer exposes a raw H.264 stdout
+The bundled ``scrcpy`` binary (4.1) no longer exposes a raw H.264 stdout
 pipe, and tailing ``--record`` MKV files costs seconds of latency. This module
-talks the scrcpy 3.3.x server protocol directly instead:
+talks the scrcpy 4.1 server protocol directly instead:
 
 1. pushes the bundled ``scrcpy-server`` blob to the device,
 2. opens an ``adb forward`` tunnel (``localabstract:scrcpy_<scid>``),
@@ -16,7 +16,7 @@ forward ~1-5ms (localhost) + WiFi transport, software decode ~5-15ms.
 USB or good WiFi lands under 100ms; congested WiFi will not — use
 :meth:`ScrcpyLiveStream.get_stats` to measure on real hardware.
 
-Protocol reference: scrcpy v3.3.4 ``app/src/server.c`` (argument list),
+Protocol reference: scrcpy v4.1 ``server/src/main/java/com/genymobile/scrcpy/Options.java`` (argument list),
 ``app/src/demuxer.c`` (packet framing), ``app/src/server.h``
 (``SC_DEVICE_NAME_FIELD_LENGTH``), and server ``Options.java``
 (``raw_stream`` semantics).
@@ -70,7 +70,11 @@ def find_server_blob(scrcpy_bin: str | Path) -> Path | None:
 
 
 def detect_server_version(scrcpy_bin: str | Path) -> str | None:
-    """Parses ``scrcpy --version`` (``"scrcpy 3.3.4 ..."``) to ``"3.3.4"``."""
+    """Parses ``scrcpy --version`` (``"scrcpy 4.1 ..."``) to ``"4.1"``.
+
+    Handles both 2-part (e.g. ``"4.1"``) and 3-part (e.g. ``"3.3.4"``) version
+    strings.
+    """
     try:
         proc = subprocess.run(
             [str(scrcpy_bin), "--version"],
@@ -79,7 +83,7 @@ def detect_server_version(scrcpy_bin: str | Path) -> str | None:
             timeout=10,
             check=False,
         )
-        match = re.search(r"scrcpy\s+(\d+\.\d+\.\d+)", proc.stdout or "")
+        match = re.search(r"scrcpy\s+(\d+\.\d+(?:\.\d+)?)", proc.stdout or "")
         return match.group(1) if match else None
     except Exception as e:
         log.debug(f"Could not detect scrcpy version: {e}")
@@ -103,7 +107,7 @@ def build_server_argv(
 ) -> list[str]:
     """Builds the exact ``adb shell ... app_process`` argv for the server.
 
-    Mirrors scrcpy 3.3.4 ``execute_server()`` for a video-only, no-control,
+    Mirrors scrcpy 4.1 ``execute_server()`` for a video-only, no-control,
     forward-tunnel client. ``raw_stream=true`` disables the dummy byte,
     device meta, codec meta, and per-packet PTS headers, leaving a pure
     Annex-B H.264 byte stream on the video socket.
