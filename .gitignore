@@ -19,5 +19,5 @@ evidence_*.mp4
 .pytest_cache/
 .ruff_cache/
 .kilo/
-.agents/
 src/pymordialdroid/bin/
+.agents/knowledge/assets/
