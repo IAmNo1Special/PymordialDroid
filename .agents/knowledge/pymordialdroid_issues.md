@@ -5,13 +5,16 @@
 ## 1. No fine camera control (HIGH — blocks pixel-perfect aiming)
 
 * **Symptom:** horizontal camera drags <600 px in 2340x1080 landscape space produce zero rotation (verified: 6× 200 px/300 ms, 600 px/800 ms, 600 px/300 ms → bit-identical frames). Only ≥800 px flicks rotate (~120–150° each). Sub-30° trims for slingshot crosshair alignment are impossible.
-* **Root cause:** `AdbDevice.swipe()` → `input swipe x1 y1 x2 y2 duration` emits a single kernel swipe; Unity camera appears to gate on minimum drag distance/velocity.
-* **Needed:** low-level touch injection (`sendevent`/`getevent` replay or scrcpy HID) exposing down/move/hold/up primitives + configurable move-event density, so small precise drags register.
+* **Status (Field-verified 2026-09-16):** RESOLVED for fine camera rotation via interpolated swipe / drag. 200 px drags now register and rotate the camera properly on Galaxy S24 Ultra.
 
 ## 2. No touch-hold / continuous-press primitive (HIGH — movement stutters)
 
-* **Symptom:** joystick travel requires repeated `swipe(...,1500ms)` + 1 s settle; every release stops the avatar → stop-start gait, ~1 action per 2–3 s. Cannot hold forward while adjusting camera (real players use two thumbs).
+* **Symptom:** joystick travel requires repeated `swipe(...,1500ms)` + 1 s settle; every release stops the avatar -> stop-start gait, ~1 action per 2–3 s. Cannot hold forward while adjusting camera (real players use two thumbs).
 * **Needed:** `touch_down(x,y)` / `touch_move(x,y)` / `touch_hold(ms)` / `touch_up()` API on `AdbDevice` + `AndroidController`, ideally multi-touch (left stick + right camera + Jump tap concurrently).
+* **Field Findings & Resolution (2026-09-16):**
+  - **SELinux Permissions:** On non-rooted retail Samsung hardware (Galaxy S24 Ultra, One UI 6.1+), SELinux restricts `shell` from writing directly to `/dev/input/event*` (`sendevent` gets `Permission denied`), preventing multi-touch slot injection without root.
+  - **Native Android 14+ `motionevent` Primitive:** Shell *does* have full permission to invoke `input motionevent <DOWN|MOVE|UP> <x> <y>`.
+  - **Joystick Hold Sequence:** Grabbing the virtual joystick center `(280, 702)` and dragging to push position `(280, 550)` via `input motionevent DOWN 280 702 && input motionevent MOVE 280 550 && sleep N && input motionevent UP 280 550` produces smooth, continuous forward walking for the entire duration with zero stop-start stutter. Verified live on Galaxy S24 Ultra.
 
 ## 3. No built-in anti-AFK scheduler (MEDIUM)
 

@@ -251,7 +251,8 @@ When an AFK disconnect occurs, the client returns to the title screen:
 
 * **Exact AFK timeout (hard-coded seconds):** bounded to 3–5 min but not yet pinned. Proposed protocol: park in world-map modal (safe), return to overworld, then fully idle with live-frame watchdog polling `screencap` deltas for the title-screen planet; binary-search idle durations 180/240/300 s. Needs user approval for a dedicated 10–15 min idle run.
 * **Stationary-Jump elevation traversal:** Jump tap alone shows no displacement; must test Jump + simultaneous forward hold on a slope/hill (needs multi-touch or rapid Jump-tap → forward-swipe sequencing).
-* **Fine yaw:** small-drags (<600 px) ignored — can `sendevent`-level touch or scrcpy HID injection achieve sub-30° trims for slingshot aiming? Open PymordialDroid enhancement.
+* **Fine yaw:** RESOLVED (Field-verified 2026-09-16). 200px camera drags reliably rotate view without deadzone gating.
+* **Continuous forward locomotion:** RESOLVED (Field-verified 2026-09-16). Grabbing joystick center `(280, 702)` and pulling forward to `(280, 550)` via `input motionevent` holds movement indefinitely without stop-start stutter.
 * **Wild spawns near Glimmerhaven:** zero wild Revomon observed in city safe zone; must travel to fields/grass outside town for combat-initiation practice. **2026-09-15:** fields are reached by moving north/northeast from spawn (away from buildings toward open grassland). Wild Revomon are physical entities that can be seen roaming — need vision-based detection (template matching or color detection) to locate them in live-stream frames.
 * **Sprint vs walk:** only one speed observed (~4 m/s); check for run modifier (joystick edge magnitude?) by varying swipe endpoint radius.
 
@@ -282,5 +283,6 @@ When an AFK disconnect occurs, the client returns to the title screen:
 | `2026-09-15 06:56` | **Player Menu Structure** | Tapping minimap $(175,140)$ opens Player Menu with left sidebar: Progress, Map, Market, Avatar (opens device info screen), Clan. Full-res OCR unreliable due to stylized fonts; use pixel-diff + template matching instead. |
 | `2026-09-15 06:58` | **Reset My Position** | User confirmed "Reset My Position" button exists in menu settings (for recovering from stuck/trapped states). Coordinates not yet mapped — priority target. |
 | `2026-09-15 07:00` | **Exploration Navigation** | Verified navigation loop: spawn → forward×3 → camera yaw left → strafe left → forward. Movement is smooth, joystick forward swipes work reliably at 1500ms duration from center $(280,702)$. Keep-alive thread fires micro-nudges every 170s. |
+| `2026-09-16 08:45` | **Low-Level Touch & Continuous Movement** | Field-verified low-level touch injection on Galaxy S24 Ultra (One UI 6.1+). Fine camera drags (200px) rotate view smoothly. Non-root SELinux restricts raw `/dev/input/event8` `sendevent`, but native Android 14 `input motionevent` (`DOWN (280,702) -> MOVE (280,550) -> sleep -> UP`) produces continuous, stutter-free movement indefinitely. |
 
 
