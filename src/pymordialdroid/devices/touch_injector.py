@@ -85,7 +85,10 @@ class TouchDeviceInfo:
 
 
 _ABS_LINE_RE = re.compile(
-    r"ABS_MT_(SLOT|POSITION_X|POSITION_Y|TRACKING_ID)\s+\(0x[0-9a-fA-F]+\):"
+    # NOTE: getevent -p does NOT print hex codes on axis lines; the (0x..)
+    # only appears on the EV_* header lines. A real line looks like:
+    #   ABS_MT_POSITION_X     : value 0, min 0, max 2339, fuzz 0, flat 0, resolution 0
+    r"ABS_MT_(SLOT|POSITION_X|POSITION_Y|TRACKING_ID)\s*:"
     r"\s*value\s+-?\d+,\s*min\s+(-?\d+),\s*max\s+(-?\d+)"
 )
 _DEVICE_BLOCK_RE = re.compile(

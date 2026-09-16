@@ -23,19 +23,19 @@ add device 2: /dev/input/event5
     EV_SYN (0x00):
     EV_KEY (0x01): BTN_TOUCH (0x14a)
     EV_ABS (0x03):
-      ABS_MT_SLOT (0x2f): value 0, min 0, max 9
-      ABS_MT_TOUCH_MAJOR (0x30): value 0, min 0, max 255
-      ABS_MT_POSITION_X (0x35): value 0, min 0, max 2339
-      ABS_MT_POSITION_Y (0x36): value 0, min 0, max 1079
-      ABS_MT_TRACKING_ID (0x39): value 0, min 0, max 65535
+      ABS_MT_SLOT           : value 0, min 0, max 9, fuzz 0, flat 0, resolution 0
+      ABS_MT_TOUCH_MAJOR    : value 0, min 0, max 255, fuzz 0, flat 0, resolution 0
+      ABS_MT_POSITION_X     : value 0, min 0, max 2339, fuzz 0, flat 0, resolution 0
+      ABS_MT_POSITION_Y     : value 0, min 0, max 1079, fuzz 0, flat 0, resolution 0
+      ABS_MT_TRACKING_ID    : value 0, min 0, max 65535, fuzz 0, flat 0, resolution 0
 add device 3: /dev/input/event7
   name:     "stm_ts"
   events:
     EV_ABS (0x03):
-      ABS_MT_SLOT (0x2f): value 0, min 0, max 4
-      ABS_MT_POSITION_X (0x35): value 0, min 0, max 1079
-      ABS_MT_POSITION_Y (0x36): value 0, min 0, max 2339
-      ABS_MT_TRACKING_ID (0x39): value 0, min 0, max 65535
+      ABS_MT_SLOT           : value 0, min 0, max 4, fuzz 0, flat 0, resolution 0
+      ABS_MT_POSITION_X     : value 0, min 0, max 1079, fuzz 0, flat 0, resolution 0
+      ABS_MT_POSITION_Y     : value 0, min 0, max 2339, fuzz 0, flat 0, resolution 0
+      ABS_MT_TRACKING_ID    : value 0, min 0, max 65535, fuzz 0, flat 0, resolution 0
 """
 
 GETEVENT_NO_TOUCH = """\
@@ -96,6 +96,27 @@ def test_parse_touch_device_returns_none_without_mt():
     assert parse_touch_device("") is None
 
 
+def test_parse_touch_device_real_world_format_has_no_hex_on_axis_lines():
+    # Regression: real `getevent -p` never prints (0x..) on the ABS_MT_* axis
+    # lines (only on the EV_* headers). The parser must not require them.
+    sample = """\
+add device 4: /dev/input/event9
+  name:     "sec_touchscreen"
+  events:
+    EV_ABS (0x03):
+      ABS_MT_SLOT           : value 0, min 0, max 15, fuzz 0, flat 0, resolution 0
+      ABS_MT_POSITION_X     : value 0, min 0, max 1079, fuzz 0, flat 0, resolution 0
+      ABS_MT_POSITION_Y     : value 0, min 0, max 2399, fuzz 0, flat 0, resolution 0
+      ABS_MT_TRACKING_ID    : value 0, min 0, max 65535, fuzz 0, flat 0, resolution 0
+"""
+    assert "(0x2f)" not in sample  # the fixture really has no hex codes
+    info = parse_touch_device(sample)
+    assert info is not None
+    assert info.node == "/dev/input/event9"
+    assert (info.x_min, info.x_max) == (0, 1079)
+    assert (info.y_min, info.y_max) == (0, 2399)
+
+
 # --- mapping ---
 
 
@@ -110,11 +131,11 @@ def test_mapper_scales_input_space_to_device_range():
 
 def test_mapper_auto_swaps_inverted_aspects():
     portrait_sample = GETEVENT_SAMPLE.replace(
-        "ABS_MT_POSITION_X (0x35): value 0, min 0, max 2339",
-        "ABS_MT_POSITION_X (0x35): value 0, min 0, max 1079",
+        "ABS_MT_POSITION_X     : value 0, min 0, max 2339, fuzz 0, flat 0, resolution 0",
+        "ABS_MT_POSITION_X     : value 0, min 0, max 1079, fuzz 0, flat 0, resolution 0",
     ).replace(
-        "ABS_MT_POSITION_Y (0x36): value 0, min 0, max 1079",
-        "ABS_MT_POSITION_Y (0x36): value 0, min 0, max 2339",
+        "ABS_MT_POSITION_Y     : value 0, min 0, max 1079, fuzz 0, flat 0, resolution 0",
+        "ABS_MT_POSITION_Y     : value 0, min 0, max 2339, fuzz 0, flat 0, resolution 0",
     )
     info = parse_touch_device(portrait_sample)
     mapper = TouchMapper(info, input_width=2340, input_height=1080)
