@@ -57,10 +57,11 @@ A frame represents an active, controllable overworld state when:
 ## 3. Reconnection Flow Timing
 
 When an AFK disconnect returns the client to title:
-1. Tap **Play** $\rightarrow$ Immutable Passport initializes in background ($\approx 4\text{--}5\text{ s}$).
-2. Tap **Connect** $\rightarrow$ Server connection establishes.
-3. **Loading Screen** with green progress bar ($\approx 9\text{--}14\text{ s}$).
-4. Total Recovery Time: $\approx 13.6\text{ seconds}$ to return to active overworld state at saved spawn.
+1. Tap **Play** `(1169, 884)` $\rightarrow$ Immutable Passport initializes in background ($\approx 2.5\text{ s}$).
+2. Tap **Connect** `(1170, 894)` $\rightarrow$ Server connection establishes ($\approx 2.5\text{ s}$).
+3. Tap **"Welcome <User>" banner** `(1170, 705)` $\rightarrow$ Account profile confirmed ($\approx 3.5\text{ s}$).
+4. **Loading Screen** with green progress bar $\rightarrow$ Overworld at saved spawn point.
+5. Total Recovery Time: $\approx 8.5\text{--}14\text{ seconds}$.
 
 ---
 
