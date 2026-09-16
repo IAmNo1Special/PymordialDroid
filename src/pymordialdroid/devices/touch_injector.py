@@ -84,11 +84,22 @@ class TouchDeviceInfo:
         return self.y_max - self.y_min
 
 
+_AXIS_CODE_MAP = {
+    "SLOT": "SLOT",
+    "POSITION_X": "POSITION_X",
+    "POSITION_Y": "POSITION_Y",
+    "TRACKING_ID": "TRACKING_ID",
+    "002f": "SLOT",
+    "2f": "SLOT",
+    "0035": "POSITION_X",
+    "35": "POSITION_X",
+    "0036": "POSITION_Y",
+    "36": "POSITION_Y",
+    "0039": "TRACKING_ID",
+    "39": "TRACKING_ID",
+}
 _ABS_LINE_RE = re.compile(
-    # NOTE: getevent -p does NOT print hex codes on axis lines; the (0x..)
-    # only appears on the EV_* header lines. A real line looks like:
-    #   ABS_MT_POSITION_X     : value 0, min 0, max 2339, fuzz 0, flat 0, resolution 0
-    r"ABS_MT_(SLOT|POSITION_X|POSITION_Y|TRACKING_ID)\s*:"
+    r"(?:ABS_MT_(SLOT|POSITION_X|POSITION_Y|TRACKING_ID)(?:\s+\(0x[0-9a-fA-F]+\))?|(002f|0035|0036|0039|2f|35|36|39))\s*:"
     r"\s*value\s+-?\d+,\s*min\s+(-?\d+),\s*max\s+(-?\d+)"
 )
 _DEVICE_BLOCK_RE = re.compile(
@@ -111,14 +122,26 @@ def parse_touch_device(getevent_output: str) -> TouchDeviceInfo | None:
         node, body = block.group(1), block.group(2)
         vals: dict[str, tuple[int, int]] = {}
         for m in _ABS_LINE_RE.finditer(body):
-            vals[m.group(1)] = (int(m.group(2)), int(m.group(3)))
+            axis_key = _AXIS_CODE_MAP.get(m.group(1) or m.group(2))
+            if axis_key:
+                vals[axis_key] = (int(m.group(3)), int(m.group(4)))
         if "SLOT" in vals and "POSITION_X" in vals and "POSITION_Y" in vals:
             name_m = _NAME_RE.search(body)
             name = name_m.group(1) if name_m else ""
             candidates.append((node, name, vals))
     if not candidates:
         return None
-    candidates.sort(key=lambda c: 0 if "touch" in c[1].lower() else 1)
+    def _rank(c: tuple[str, str, dict[str, tuple[int, int]]]) -> int:
+        n = c[1].lower()
+        if "touchscreen" in n:
+            return 0
+        if "touch" in n and "pad" not in n:
+            return 1
+        if "touch" in n:
+            return 2
+        return 3
+
+    candidates.sort(key=_rank)
     node, name, vals = candidates[0]
     return TouchDeviceInfo(
         node=node,
@@ -269,6 +292,7 @@ class TouchInjector:
         if info is None:
             self._warn_once("no multi-touch input device found via getevent -p")
             return False
+        self._info = info
         # Permission probe: a bare SYN_REPORT is a harmless no-op frame.
         try:
             out = self._run(f"sendevent {info.node} 0 0 0")
@@ -292,7 +316,6 @@ class TouchInjector:
             else:
                 # Last resort: assume caller space == device native range.
                 iw, ih = max(info.x_range, 1), max(info.y_range, 1)
-        self._info = info
         self._mapper = TouchMapper(info, iw, ih, swap_axes=self._swap_axes)
         log.info(
             f"TouchInjector: using {info.node} ({info.name or 'unnamed'}) "

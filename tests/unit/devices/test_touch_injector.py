@@ -45,6 +45,42 @@ add device 1: /dev/input/event2
     EV_KEY (0x01): KEY_POWER (0x74)
 """
 
+GETEVENT_HEX_SAMPLE = """\
+add device 4: /dev/input/event8
+  name:     "sec_touchscreen"
+  events:
+    KEY (0001): 008f  0118  0119  0145  014a  0226  02be
+    ABS (0003): 0000  : value 0, min 0, max 4095, fuzz 0, flat 0, resolution 0
+                0001  : value 0, min 0, max 4095, fuzz 0, flat 0, resolution 0
+                002f  : value 0, min 0, max 9, fuzz 0, flat 0, resolution 0
+                0030  : value 0, min 0, max 255, fuzz 0, flat 0, resolution 0
+                0031  : value 0, min 0, max 255, fuzz 0, flat 0, resolution 0
+                0035  : value 0, min 0, max 4095, fuzz 0, flat 0, resolution 0
+                0036  : value 0, min 0, max 4095, fuzz 0, flat 0, resolution 0
+                0039  : value 0, min 0, max 65535, fuzz 0, flat 0, resolution 0
+  input props:
+    INPUT_PROP_DIRECT
+"""
+
+GETEVENT_LABEL_SAMPLE = """\
+add device 1: /dev/input/event8
+  name:     "sec_touchscreen"
+  events:
+    KEY (0001): KEY_WAKEUP            0118                  0119                  BTN_TOOL_FINGER
+                BTN_TOUCH             0226                  02be
+    ABS (0003): ABS_X                 : value 0, min 0, max 4095, fuzz 0, flat 0, resolution 0
+                ABS_Y                 : value 0, min 0, max 4095, fuzz 0, flat 0, resolution 0
+                ABS_MT_SLOT           : value 0, min 0, max 9, fuzz 0, flat 0, resolution 0
+                ABS_MT_TOUCH_MAJOR    : value 0, min 0, max 255, fuzz 0, flat 0, resolution 0
+                ABS_MT_TOUCH_MINOR    : value 0, min 0, max 255, fuzz 0, flat 0, resolution 0
+                ABS_MT_POSITION_X     : value 0, min 0, max 4095, fuzz 0, flat 0, resolution 0
+                ABS_MT_POSITION_Y     : value 0, min 0, max 4095, fuzz 0, flat 0, resolution 0
+                ABS_MT_TRACKING_ID    : value 0, min 0, max 65535, fuzz 0, flat 0, resolution 0
+  input props:
+    INPUT_PROP_DIRECT
+"""
+
+
 
 def make_runner(script):
     """Builds a fake run_command dispatching on command prefix; records calls."""
@@ -115,6 +151,24 @@ add device 4: /dev/input/event9
     assert info.node == "/dev/input/event9"
     assert (info.x_min, info.x_max) == (0, 1079)
     assert (info.y_min, info.y_max) == (0, 2399)
+
+
+def test_parse_touch_device_hex_sample():
+    info = parse_touch_device(GETEVENT_HEX_SAMPLE)
+    assert info is not None
+    assert info.node == "/dev/input/event8"
+    assert info.name == "sec_touchscreen"
+    assert (info.x_min, info.x_max) == (0, 4095)
+    assert (info.y_min, info.y_max) == (0, 4095)
+
+
+def test_parse_touch_device_label_sample():
+    info = parse_touch_device(GETEVENT_LABEL_SAMPLE)
+    assert info is not None
+    assert info.node == "/dev/input/event8"
+    assert info.name == "sec_touchscreen"
+    assert (info.x_min, info.x_max) == (0, 4095)
+    assert (info.y_min, info.y_max) == (0, 4095)
 
 
 # --- mapping ---
