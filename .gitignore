@@ -21,3 +21,4 @@ evidence_*.mp4
 .kilo/
 src/pymordialdroid/bin/
 .agents/knowledge/assets/
+touch_validation/
