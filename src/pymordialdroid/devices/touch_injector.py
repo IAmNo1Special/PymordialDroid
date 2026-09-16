@@ -25,11 +25,14 @@ PymordialDroid's live stream runs scrcpy-server with ``control=false``
 would mean a second socket plus version-specific message framing (scrcpy 3.x
 vs 4.x differ). ``sendevent`` works over the existing pure-Python adb_shell
 connection with no extra processes, so it is the primary path on rooted /
-SELinux-permissive devices — and the ONLY path for true multi-touch
-(simultaneous slots). On non-rooted retail hardware (field-verified on the
+SELinux-permissive devices. On non-rooted retail hardware (field-verified on the
 Galaxy S24 Ultra: SELinux denies shell writes to /dev/input/event*) the
-``input motionevent`` backend (``motionevent_injector.py``) is tried first;
-``AdbDevice`` selects motionevent -> sendevent -> ``input swipe`` fallback.
+``input motionevent`` backend (``motionevent_injector.py``) handles
+single-pointer traffic, and the scrcpy-control backend
+(``scrcpy_control.py``) provides true multi-touch slots via scrcpy-server's
+INJECT_TOUCH_EVENT control messages — no root, no SELinux involvement.
+``AdbDevice`` selects scrcpy-control (lazy daemon) -> motionevent ->
+sendevent -> ``input swipe`` fallback.
 
 What could not be verified without hardware
 -------------------------------------------

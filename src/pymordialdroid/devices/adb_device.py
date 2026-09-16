@@ -12,7 +12,11 @@ from pymordial.core.blueprints.bridge_device import PymordialBridgeDevice
 
 from pymordialdroid.config import SystemConfig, resolve_system_config
 from pymordialdroid.devices.motionevent_injector import MotionEventInjector
-from pymordialdroid.devices.touch_injector import TouchInjector
+from pymordialdroid.devices.scrcpy_control import ScrcpyControlInjector
+from pymordialdroid.devices.scrcpy_control import (
+    _find_server_blob as _find_scrcpy_server_blob,
+)
+from pymordialdroid.devices.touch_injector import TouchInjector, detect_input_size
 
 log = logging.getLogger("pymordialdroid")
 
@@ -35,6 +39,7 @@ class AdbDevice(PymordialBridgeDevice):
         system_config: SystemConfig | None = None,
         touch_input_width: int | None = None,
         touch_input_height: int | None = None,
+        scrcpy_control: bool = False,
     ) -> None:
         self.host = host
         self.port = port
@@ -50,14 +55,18 @@ class AdbDevice(PymordialBridgeDevice):
         # the same input space as tap()/swipe() (the display's current input
         # space, e.g. 2340x1080 landscape for Revomon Novus). When None, the
         # input space is auto-detected (dumpsys -> wm size) — only the
-        # sendevent backend needs this; `input motionevent` takes display
-        # pixels directly.
+        # sendevent backend needs this; `input motionevent` and scrcpy-control
+        # take display pixels directly (scrcpy-control still needs the size
+        # for its packet header, resolved the same way).
         self._touch_input_width = touch_input_width
         self._touch_input_height = touch_input_height
         self._touch_injector: TouchInjector | None = None
         self._motionevent_injector: MotionEventInjector | None = None
-        self._selected_touch_backend: Any = None  # set by _touch_backend()
-        self._touch_backend_probed = False
+        self._scrcpy_injector: ScrcpyControlInjector | None = None
+        self._scrcpy_control_enabled = scrcpy_control  # eager daemon on 1st use
+        self._cli_endpoint_ensured = False
+        self._sp_backend: Any = None  # single-pointer backend, cached
+        self._sp_backend_probed = False
 
     def initialize(self, config: Any = None) -> None:
         """Initializes the ADB device plugin."""
@@ -431,11 +440,20 @@ class AdbDevice(PymordialBridgeDevice):
 
     # --- LOW-LEVEL TOUCH INJECTION (backend chain) ---
     #
-    # Priority: `input motionevent` (works on non-rooted retail devices with
-    # SELinux enforcing; single-pointer only) -> sendevent (rooted /
+    # Priority: scrcpy-control (full multi-touch + single-pointer, no root;
+    # preferred once its daemon is up) -> `input motionevent` (single-pointer,
+    # works on non-rooted retail devices, cheap probe) -> sendevent (rooted /
     # permissive devices; real multi-touch slots) -> legacy `input swipe`
     # fallbacks where semantically possible. Bare down/move/up stay honest:
     # False is returned when no backend can inject — never faked.
+    #
+    # Probe-cost policy: the scrcpy daemon (jar push + server spawn + adb
+    # forward + handshake) is heavyweight, so it is NOT started eagerly.
+    # Single-pointer traffic uses the cheap motionevent probe; the daemon
+    # starts lazily on the first multi-pointer request (slot > 0) or when
+    # explicitly enabled (``scrcpy_control=True`` / ``start_multitouch()``).
+    # Once the daemon is up it serves every slot — it is the lowest-latency,
+    # highest-fidelity path available.
 
     def _touch(self) -> TouchInjector:
         """Lazily creates the sendevent touch injector for this device."""
@@ -453,15 +471,62 @@ class AdbDevice(PymordialBridgeDevice):
             self._motionevent_injector = MotionEventInjector(self.run_command)
         return self._motionevent_injector
 
-    def _touch_backend(self) -> Any:
-        """Selects the best available touch backend, once, then caches it.
+    def _scrcpy_control(self) -> ScrcpyControlInjector | None:
+        """Lazily creates the scrcpy-control multi-touch injector.
 
-        motionevent is probed first: on non-rooted retail hardware it is the
-        only low-level path. sendevent is probed only when motionevent is
-        absent. Returns None when neither backend can inject.
+        Returns None when the server blob cannot be found on the host (the
+        daemon can never start). Registers the TCP endpoint with the CLI adb
+        server once, since the daemon shells out to the adb binary.
         """
-        if not self._touch_backend_probed:
-            self._touch_backend_probed = True
+        if self._scrcpy_injector is None:
+            try:
+                adb_bin = str(self.system_config.adb_bin_path)
+                scrcpy_bin = getattr(self.system_config, "scrcpy_bin_path", None)
+                blob = _find_scrcpy_server_blob(
+                    adb_bin, str(scrcpy_bin) if scrcpy_bin is not None else None
+                )
+            except Exception as e:
+                log.debug(f"scrcpy-control: blob lookup failed: {e}")
+                return None
+            if blob is None:
+                log.debug("scrcpy-control: server blob not found on host")
+                return None
+            if not self._cli_endpoint_ensured:
+                self._cli_endpoint_ensured = True
+                self.ensure_cli_endpoint()
+            w, h = self._touch_input_width, self._touch_input_height
+            if w is None or h is None:
+                try:
+                    detected = detect_input_size(self.run_command)
+                except Exception:
+                    detected = None
+                if detected is not None:
+                    w, h = detected
+            self._scrcpy_injector = ScrcpyControlInjector(
+                adb_bin,
+                f"{self.host}:{self.port}",
+                blob,
+                screen_width=w,
+                screen_height=h,
+            )
+        return self._scrcpy_injector
+
+    def start_multitouch(self, timeout: float = 20.0) -> bool:
+        """Explicitly starts the scrcpy-control multi-touch daemon.
+
+        After this returns True, all touch traffic (including single-pointer)
+        routes through the daemon. Returns False when the daemon cannot
+        start (no server blob, adb unreachable, handshake timeout).
+        """
+        injector = self._scrcpy_control()
+        if injector is None:
+            return False
+        return injector.ensure_started(timeout=timeout)
+
+    def _single_pointer_backend(self) -> Any:
+        """Cheap cached chain for slot 0: motionevent -> sendevent."""
+        if not self._sp_backend_probed:
+            self._sp_backend_probed = True
             backend: Any = None
             motionevent = self._motionevent()
             if motionevent.available:
@@ -472,37 +537,71 @@ class AdbDevice(PymordialBridgeDevice):
                 if sendevent.available:
                     backend = sendevent
                     log.info("touch backend: sendevent")
-            self._selected_touch_backend = backend
-        return self._selected_touch_backend
+            self._sp_backend = backend
+        return self._sp_backend
+
+    def _touch_backend(self, slot: int = 0) -> Any:
+        """Selects the best touch backend for the given slot.
+
+        Daemon already up -> scrcpy-control serves everything. Multi-pointer
+        (slot > 0) or explicitly enabled -> lazy daemon start, then sendevent
+        for real multi-touch slots, else None (honest). Single-pointer ->
+        the cheap cached motionevent/sendevent chain.
+        """
+        scrcpy = self._scrcpy_control()
+        if scrcpy is not None:
+            if scrcpy.daemon_running:
+                return scrcpy
+            if slot > 0 or self._scrcpy_control_enabled:
+                if scrcpy.ensure_started():
+                    log.info("touch backend: scrcpy-control")
+                    return scrcpy
+                log.warning(
+                    "scrcpy-control daemon failed to start; "
+                    "falling back to remaining backends"
+                )
+        if slot > 0:
+            sendevent = self._touch()
+            if sendevent.available:
+                log.info("touch backend: sendevent (multi-touch)")
+                return sendevent
+            return None
+        return self._single_pointer_backend()
 
     @property
     def touch_available(self) -> bool:
-        """True when any low-level touch backend can inject on the device."""
-        return self._touch_backend() is not None
+        """True when any low-level touch backend can inject on the device.
+
+        Cheap: checks the single-pointer chain only. The scrcpy-control
+        daemon is NOT started by this property (use ``start_multitouch()``
+        or a slot>0 call to bring it up).
+        """
+        return self._touch_backend(0) is not None
 
     def touch_down(self, x: float, y: float, slot: int = 0) -> bool:
         """Presses a contact down at (x, y) on the given multi-touch slot.
 
         Coordinates use the same input space as :meth:`tap`/:meth:`swipe`.
         Returns False when no touch backend is available (no fallback — a
-        bare down has no ``input`` equivalent), or when the motionevent
-        backend is asked for ``slot > 0`` (single-pointer only).
+        bare down has no ``input`` equivalent). Multi-pointer slots (slot>0)
+        lazily start the scrcpy-control daemon; when it cannot start,
+        sendevent (rooted) is tried, else False is returned honestly.
         """
-        backend = self._touch_backend()
+        backend = self._touch_backend(slot)
         if backend is None:
             return False
         return backend.touch_down(x, y, slot=slot)
 
     def touch_move(self, x: float, y: float, slot: int = 0) -> bool:
         """Moves an already-down contact to (x, y) on the given slot."""
-        backend = self._touch_backend()
+        backend = self._touch_backend(slot)
         if backend is None:
             return False
         return backend.touch_move(x, y, slot=slot)
 
     def touch_up(self, slot: int = 0) -> bool:
         """Lifts the contact on the given slot."""
-        backend = self._touch_backend()
+        backend = self._touch_backend(slot)
         if backend is None:
             return False
         return backend.touch_up(slot=slot)
@@ -512,7 +611,7 @@ class AdbDevice(PymordialBridgeDevice):
 
         Returns False when no touch backend is available.
         """
-        backend = self._touch_backend()
+        backend = self._touch_backend(slot)
         if backend is None:
             return False
         return backend.touch_cancel(slot=slot)
@@ -523,7 +622,7 @@ class AdbDevice(PymordialBridgeDevice):
         Falls back to an ``input swipe`` long-press (same start/end point)
         when no touch backend is available.
         """
-        backend = self._touch_backend()
+        backend = self._touch_backend(slot)
         if backend is not None:
             return backend.touch_hold(x, y, duration_ms, slot=slot)
         log.warning(
@@ -535,10 +634,11 @@ class AdbDevice(PymordialBridgeDevice):
         """Context manager holding a contact down for the block's duration.
 
         Enables two-thumb play: hold the joystick on slot 0 while issuing
-        ``touch_move`` / ``precise_drag`` on slot 1 (sendevent backend only —
-        motionevent is single-pointer). Always releases on exit.
+        ``touch_move`` / ``precise_drag`` on slot 1 (scrcpy-control daemon
+        when available, else sendevent on rooted devices — motionevent is
+        single-pointer). Always releases on exit.
         """
-        backend = self._touch_backend()
+        backend = self._touch_backend(slot)
         if backend is None:
             raise RuntimeError("touch injection unavailable; no usable backend")
         return backend.held_touch(x, y, slot=slot)
@@ -560,7 +660,7 @@ class AdbDevice(PymordialBridgeDevice):
         distance/velocity register small, precise drags. Falls back to
         :meth:`swipe` when no touch backend is available.
         """
-        backend = self._touch_backend()
+        backend = self._touch_backend(slot)
         if backend is not None:
             return backend.precise_drag(
                 x1, y1, x2, y2, steps=steps, step_delay_ms=step_delay_ms, slot=slot

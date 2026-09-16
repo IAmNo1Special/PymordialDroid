@@ -29,10 +29,10 @@ Research notes (2026-09-16; no hardware in this environment)
 - SINGLE-POINTER ONLY. Per adb-multitouch's README: "`adb shell input` is
   single-touch only because its CLI doesn't expose more — not because of a
   permission limit." True multi-touch (ACTION_POINTER_DOWN/UP) needs a
-  custom injector (their ``mt.jar`` via ``app_process``). Out of scope:
-  ``slot > 0`` honestly returns False with a clear log, and the class is
-  shaped so a future pointer-aware backend can slot into the same
-  ``AdbDevice`` selection chain.
+  custom injector — that role is now filled by ``scrcpy_control.py``
+  (scrcpy-server's INJECT_TOUCH_EVENT, field-verified 2026-09-16), which
+  ``AdbDevice`` starts lazily for slot > 0. ``slot > 0`` here still logs a
+  warning and returns False (never faked).
 - A gesture stream SURVIVES ACROSS PROCESSES: each ``input motionevent``
   invocation joins the ongoing gesture. That is why DOWN && sleep && UP —
   whether chained in one shell call or issued as separate calls — works.
