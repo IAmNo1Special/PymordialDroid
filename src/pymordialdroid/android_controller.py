@@ -177,6 +177,10 @@ class AndroidController(PymordialController):
         """Lifts the contact on the given slot."""
         return self.bridge.touch_up(slot=slot)
 
+    def touch_cancel(self, slot: int = 0) -> bool:
+        """Cancels the active gesture on the given slot (recovery)."""
+        return self.bridge.touch_cancel(slot=slot)
+
     def touch_hold(self, x: float, y: float, duration_ms: int, slot: int = 0) -> bool:
         """Holds a contact down at (x, y) for ``duration_ms``, then releases."""
         return self.bridge.touch_hold(x, y, duration_ms, slot=slot)

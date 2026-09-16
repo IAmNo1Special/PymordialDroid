@@ -24,14 +24,21 @@ PymordialDroid's live stream runs scrcpy-server with ``control=false``
 (video-only, no control socket — see ``live_stream.py``). Adding control
 would mean a second socket plus version-specific message framing (scrcpy 3.x
 vs 4.x differ). ``sendevent`` works over the existing pure-Python adb_shell
-connection with no extra processes, so it is the primary path.
+connection with no extra processes, so it is the primary path on rooted /
+SELinux-permissive devices — and the ONLY path for true multi-touch
+(simultaneous slots). On non-rooted retail hardware (field-verified on the
+Galaxy S24 Ultra: SELinux denies shell writes to /dev/input/event*) the
+``input motionevent`` backend (``motionevent_injector.py``) is tried first;
+``AdbDevice`` selects motionevent -> sendevent -> ``input swipe`` fallback.
 
 What could not be verified without hardware
 -------------------------------------------
-- Whether the adb shell user can write to ``/dev/input/event*`` (usually in
-  the ``input`` group on AOSP; Samsung may differ). The injector probes with
-  a harmless ``SYN_REPORT`` and falls back to ``input`` commands on
-  "Permission denied".
+- Whether the adb shell user can write to ``/dev/input/event*``: FIELD-
+  VERIFIED — denied on retail Samsung (S24 Ultra, One UI 6.1+, Android 16;
+  "Permission denied"). The injector probes with a harmless ``SYN_REPORT``
+  and ``AdbDevice`` falls back to the ``input motionevent`` backend. It
+  remains usable on rooted / SELinux-permissive builds and is the only
+  backend with real multi-touch slots.
 - The touchscreen's native axis orientation vs the display input space. The
   mapper auto-swaps axes when aspect ratios invert; the swap *direction* is a
   field-verification item (see ``validate_touch_injection.py``).
@@ -294,8 +301,12 @@ class TouchInjector:
             return False
         self._info = info
         # Permission probe: a bare SYN_REPORT is a harmless no-op frame.
+        # ``2>&1`` is required: adb_shell's shell() only returns stdout,
+        # and sendevent writes "Permission denied" to stderr — without the
+        # redirect the probe could report True when SELinux actually
+        # denies the write (field-verified on retail Samsung).
         try:
-            out = self._run(f"sendevent {info.node} 0 0 0")
+            out = self._run(f"sendevent {info.node} 0 0 0 2>&1")
         except Exception as e:
             self._warn_once(f"sendevent probe failed: {e}")
             return False
@@ -397,6 +408,14 @@ class TouchInjector:
         self._active_slots.discard(slot)
         last_contact = not self._active_slots
         return self._exec(self._up_seq(slot, last_contact))
+
+    def touch_cancel(self, slot: int = 0) -> bool:
+        """Cancels the contact on the given slot (alias for touch_up here).
+
+        Present so the sendevent backend exposes the same surface as the
+        motionevent backend; a full protocol-B cancel is just the release.
+        """
+        return self.touch_up(slot=slot)
 
     def touch_hold(self, x: float, y: float, duration_ms: int, slot: int = 0) -> bool:
         """Holds a contact down for ``duration_ms`` then releases it.

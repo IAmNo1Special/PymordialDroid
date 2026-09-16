@@ -11,6 +11,7 @@ from adb_shell.auth.sign_pythonrsa import PythonRSASigner
 from pymordial.core.blueprints.bridge_device import PymordialBridgeDevice
 
 from pymordialdroid.config import SystemConfig, resolve_system_config
+from pymordialdroid.devices.motionevent_injector import MotionEventInjector
 from pymordialdroid.devices.touch_injector import TouchInjector
 
 log = logging.getLogger("pymordialdroid")
@@ -45,13 +46,18 @@ class AdbDevice(PymordialBridgeDevice):
         self._is_streaming: bool = False
         self._frame_provider: Any = None
 
-        # Low-level touch injection (sendevent). Coordinates passed to the
-        # touch_* API use the same input space as tap()/swipe() (the display's
-        # current input space, e.g. 2340x1080 landscape for Revomon Novus).
-        # When None, the input space is auto-detected (dumpsys -> wm size).
+        # Low-level touch injection. Coordinates passed to the touch_* API use
+        # the same input space as tap()/swipe() (the display's current input
+        # space, e.g. 2340x1080 landscape for Revomon Novus). When None, the
+        # input space is auto-detected (dumpsys -> wm size) — only the
+        # sendevent backend needs this; `input motionevent` takes display
+        # pixels directly.
         self._touch_input_width = touch_input_width
         self._touch_input_height = touch_input_height
         self._touch_injector: TouchInjector | None = None
+        self._motionevent_injector: MotionEventInjector | None = None
+        self._selected_touch_backend: Any = None  # set by _touch_backend()
+        self._touch_backend_probed = False
 
     def initialize(self, config: Any = None) -> None:
         """Initializes the ADB device plugin."""
@@ -423,7 +429,13 @@ class AdbDevice(PymordialBridgeDevice):
         )
         return res is not None
 
-    # --- LOW-LEVEL TOUCH INJECTION (sendevent) ---
+    # --- LOW-LEVEL TOUCH INJECTION (backend chain) ---
+    #
+    # Priority: `input motionevent` (works on non-rooted retail devices with
+    # SELinux enforcing; single-pointer only) -> sendevent (rooted /
+    # permissive devices; real multi-touch slots) -> legacy `input swipe`
+    # fallbacks where semantically possible. Bare down/move/up stay honest:
+    # False is returned when no backend can inject — never faked.
 
     def _touch(self) -> TouchInjector:
         """Lazily creates the sendevent touch injector for this device."""
@@ -435,37 +447,85 @@ class AdbDevice(PymordialBridgeDevice):
             )
         return self._touch_injector
 
+    def _motionevent(self) -> MotionEventInjector:
+        """Lazily creates the `input motionevent` injector for this device."""
+        if self._motionevent_injector is None:
+            self._motionevent_injector = MotionEventInjector(self.run_command)
+        return self._motionevent_injector
+
+    def _touch_backend(self) -> Any:
+        """Selects the best available touch backend, once, then caches it.
+
+        motionevent is probed first: on non-rooted retail hardware it is the
+        only low-level path. sendevent is probed only when motionevent is
+        absent. Returns None when neither backend can inject.
+        """
+        if not self._touch_backend_probed:
+            self._touch_backend_probed = True
+            backend: Any = None
+            motionevent = self._motionevent()
+            if motionevent.available:
+                backend = motionevent
+                log.info("touch backend: input motionevent")
+            else:
+                sendevent = self._touch()
+                if sendevent.available:
+                    backend = sendevent
+                    log.info("touch backend: sendevent")
+            self._selected_touch_backend = backend
+        return self._selected_touch_backend
+
     @property
     def touch_available(self) -> bool:
-        """True when low-level sendevent injection is usable on the device."""
-        return self._touch().available
+        """True when any low-level touch backend can inject on the device."""
+        return self._touch_backend() is not None
 
     def touch_down(self, x: float, y: float, slot: int = 0) -> bool:
         """Presses a contact down at (x, y) on the given multi-touch slot.
 
         Coordinates use the same input space as :meth:`tap`/:meth:`swipe`.
-        Returns False when sendevent injection is unavailable (no fallback —
-        a bare down has no ``input`` equivalent).
+        Returns False when no touch backend is available (no fallback — a
+        bare down has no ``input`` equivalent), or when the motionevent
+        backend is asked for ``slot > 0`` (single-pointer only).
         """
-        return self._touch().touch_down(x, y, slot=slot)
+        backend = self._touch_backend()
+        if backend is None:
+            return False
+        return backend.touch_down(x, y, slot=slot)
 
     def touch_move(self, x: float, y: float, slot: int = 0) -> bool:
         """Moves an already-down contact to (x, y) on the given slot."""
-        return self._touch().touch_move(x, y, slot=slot)
+        backend = self._touch_backend()
+        if backend is None:
+            return False
+        return backend.touch_move(x, y, slot=slot)
 
     def touch_up(self, slot: int = 0) -> bool:
         """Lifts the contact on the given slot."""
-        return self._touch().touch_up(slot=slot)
+        backend = self._touch_backend()
+        if backend is None:
+            return False
+        return backend.touch_up(slot=slot)
+
+    def touch_cancel(self, slot: int = 0) -> bool:
+        """Cancels the active gesture on the given slot (stuck-gesture recovery).
+
+        Returns False when no touch backend is available.
+        """
+        backend = self._touch_backend()
+        if backend is None:
+            return False
+        return backend.touch_cancel(slot=slot)
 
     def touch_hold(self, x: float, y: float, duration_ms: int, slot: int = 0) -> bool:
         """Holds a contact down at (x, y) for ``duration_ms``, then releases.
 
         Falls back to an ``input swipe`` long-press (same start/end point)
-        when sendevent injection is unavailable.
+        when no touch backend is available.
         """
-        injector = self._touch()
-        if injector.available:
-            return injector.touch_hold(x, y, duration_ms, slot=slot)
+        backend = self._touch_backend()
+        if backend is not None:
+            return backend.touch_hold(x, y, duration_ms, slot=slot)
         log.warning(
             "touch injection unavailable; falling back to input swipe long-press"
         )
@@ -475,9 +535,13 @@ class AdbDevice(PymordialBridgeDevice):
         """Context manager holding a contact down for the block's duration.
 
         Enables two-thumb play: hold the joystick on slot 0 while issuing
-        ``touch_move`` / ``precise_drag`` on slot 1. Always releases on exit.
+        ``touch_move`` / ``precise_drag`` on slot 1 (sendevent backend only —
+        motionevent is single-pointer). Always releases on exit.
         """
-        return self._touch().held_touch(x, y, slot=slot)
+        backend = self._touch_backend()
+        if backend is None:
+            raise RuntimeError("touch injection unavailable; no usable backend")
+        return backend.held_touch(x, y, slot=slot)
 
     def precise_drag(
         self,
@@ -494,11 +558,11 @@ class AdbDevice(PymordialBridgeDevice):
         The fine-control primitive: unlike :meth:`swipe` (one coarse kernel
         swipe), the dense move-event stream lets games that gate on drag
         distance/velocity register small, precise drags. Falls back to
-        :meth:`swipe` when sendevent injection is unavailable.
+        :meth:`swipe` when no touch backend is available.
         """
-        injector = self._touch()
-        if injector.available:
-            return injector.precise_drag(
+        backend = self._touch_backend()
+        if backend is not None:
+            return backend.precise_drag(
                 x1, y1, x2, y2, steps=steps, step_delay_ms=step_delay_ms, slot=slot
             )
         log.warning("touch injection unavailable; falling back to input swipe")
