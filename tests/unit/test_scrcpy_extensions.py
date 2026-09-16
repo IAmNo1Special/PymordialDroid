@@ -219,13 +219,13 @@ def test_parse_bit_rate():
 
 
 def test_build_server_argv_exact():
-    """Server argv must match the scrcpy 3.3.4 wire protocol exactly."""
+    """Server argv must match the scrcpy 4.1 wire protocol exactly."""
     from pymordialdroid.live_stream import build_server_argv
 
     argv = build_server_argv(
         "adb",
         "192.168.1.50:5555",
-        "3.3.4",
+        "4.1",
         0x12345678,
         max_size=960,
         bit_rate=2_000_000,
@@ -240,7 +240,7 @@ def test_build_server_argv_exact():
         "app_process",
         "/",
         "com.genymobile.scrcpy.Server",
-        "3.3.4",
+        "4.1",
         "scid=12345678",
         "log_level=error",
         "audio=false",
@@ -258,7 +258,7 @@ def test_build_server_argv_virtual_display():
     from pymordialdroid.live_stream import build_server_argv
 
     argv = build_server_argv(
-        "adb", "s", "3.3.4", 1, new_display="1920x1080", stay_awake=False
+        "adb", "s", "4.1", 1, new_display="1920x1080", stay_awake=False
     )
     assert "new_display=1920x1080" in argv
     assert "vd_system_decorations=false" in argv
