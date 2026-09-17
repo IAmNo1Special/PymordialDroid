@@ -20,5 +20,4 @@ evidence_*.mp4
 .ruff_cache/
 .kilo/
 src/pymordialdroid/bin/
-.agents/knowledge/assets/
 touch_validation/

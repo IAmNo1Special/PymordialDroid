@@ -4,7 +4,7 @@ okf_version: "0.2"
 
 # PymordialDroid Knowledge Base
 
-An Open Knowledge Format (OKF v0.2) knowledge bundle documenting the PymordialDroid automation framework and Revomon: Novus game automation domain.
+An Open Knowledge Format (OKF v0.2) knowledge bundle documenting the PymordialDroid physical Android device automation framework.
 
 ## Domains & Catalogs
 
@@ -15,9 +15,3 @@ An Open Knowledge Format (OKF v0.2) knowledge bundle documenting the PymordialDr
   - [Touch Injection & Multi-Touch Architecture](./pymordialdroid/touch_injection.md)
   - [Bugs, Issues & Fieldwork Findings](./pymordialdroid/issues.md)
 
-- [Revomon: Novus Domain Knowledge](./games/revomon_novus/index.md) — Game profile, normalized coordinate geometry, HUD interfaces, multi-touch locomotion, combat mechanics, and vision detection anchors.
-  - [Game Profile & Geometry Normalization](./games/revomon_novus/profile.md)
-  - [HUD & Interface State Machine](./games/revomon_novus/hud_interface.md)
-  - [Locomotion, Camera & Multi-Touch Controls](./games/revomon_novus/locomotion.md)
-  - [Combat Initiation & Slingshot Mechanics](./games/revomon_novus/combat_slingshot.md)
-  - [Vision Grounding & State Detection Anchors](./games/revomon_novus/vision_anchors.md)

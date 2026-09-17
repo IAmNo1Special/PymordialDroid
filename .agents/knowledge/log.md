@@ -8,6 +8,7 @@
 - **Update**: Added fine camera rotation calibration bypassing Unity deadzone using dense interpolated drags (`precise_drag`).
 - **Update**: Documented 100% menu navigation, sidebar hierarchy, calibrated 2340x1080 combat stadium overlay (VS badge, attack cards, capsules), minimap radar wild Revomon blips, and waypoint reset in `games/revomon_novus/hud_interface.md`.
 - **Update**: Documented 3-tap title screen re-login sequence (`Play` -> `Connect` -> `Welcome <User>` banner) in `games/revomon_novus/vision_anchors.md`.
+- **Transfer**: Sharded Revomon: Novus domain knowledge and UI assets into the dedicated `RevomonAuto` repository (`.agents/knowledge/`).
 
 ## 2026-09-15
 - **Creation**: Initial fieldwork logs and Revomon: Novus game mechanics repository established.

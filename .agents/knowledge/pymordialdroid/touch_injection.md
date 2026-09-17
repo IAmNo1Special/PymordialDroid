@@ -112,4 +112,4 @@ dev.precise_drag(1755, 540, 1305, 540, steps=35, step_delay_ms=25, slot=1)
 dev.touch_up(slot=0)
 ```
 
-See also: [Architecture Guide](./architecture.md), [Display Streaming](./display_streaming.md), and [Revomon Locomotion](../games/revomon_novus/locomotion.md).
+See also: [Architecture Guide](./architecture.md), [Display Streaming](./display_streaming.md), and [Configuration Guide](./configuration.md).
