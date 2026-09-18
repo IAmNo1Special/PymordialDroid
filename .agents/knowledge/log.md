@@ -1,5 +1,8 @@
 # Knowledge Changelog
 
+## 2026-09-17
+- **Update**: Documented native resolution live streaming mode (`max_size=0`) in `pymordialdroid/display_streaming.md` to prevent coordinate drift and template mismatch when operating real-time CV pipelines against native device assets.
+
 ## 2026-09-16
 - **Refactoring**: Sharded monolithic knowledge files (`pymordialdroid.md`, `pymordialdroid_issues.md`, `revomon_novus_knowledge.md`) into modular, domain-specific concepts under `pymordialdroid/` and `games/revomon_novus/`.
 - **Standardization**: Converted all concepts to Open Knowledge Format (OKF v0.2) compliance with YAML frontmatter, trust signals, and progressive disclosure directory indices.

@@ -52,6 +52,7 @@ graph TD
 * Produces frames at **44–69 FPS** with frame ages between **11–40 ms**.
 * Ingests into `AndroidController.capture_screen()`, providing sub-100 ms loop latency.
 * **Actual Resolution Note**: While requested with `max_size=960`, the actual frame dimensions are **`960x442`** (not `960x440`), because `scrcpy` rounds downscaled dimensions to even integers. Vision code must read `frame.shape[:2]` dynamically.
+* **Native Resolution Stream (`max_size=0`)**: When executing OpenCV template matching against assets captured at native device resolution (e.g. $2340 \times 1080$), pass `max_size=0` to preserve physical display resolution without downscale distortion or coordinate drift, while retaining sub-50 ms streaming latency.
 
 ### 2.2 Full-Resolution Screencap Pipeline
 * Plain `adb shell screencap -p` captures uncompressed PNG frames at native device resolution (**`2340x1080`** on Galaxy S24 Ultra).
