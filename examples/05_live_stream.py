@@ -61,13 +61,17 @@ def main() -> int:
         stats = phone.get_live_stats()
         print(f"samples={len(latencies)} misses={misses}")
         if latencies:
-            print(f"mean={statistics.fmean(latencies):.1f}ms "
-                  f"p50={percentile(latencies, 50):.1f}ms "
-                  f"p95={percentile(latencies, 95):.1f}ms "
-                  f"p99={percentile(latencies, 99):.1f}ms")
-        print(f"stream: age_ms={stats.get('age_ms')} fps={stats.get('fps')} "
-              f"stale={stats.get('stale')} decoded={stats.get('frames_decoded')} "
-              f"size={stats.get('width')}x{stats.get('height')}")
+            print(
+                f"mean={statistics.fmean(latencies):.1f}ms "
+                f"p50={percentile(latencies, 50):.1f}ms "
+                f"p95={percentile(latencies, 95):.1f}ms "
+                f"p99={percentile(latencies, 99):.1f}ms"
+            )
+        print(
+            f"stream: age_ms={stats.get('age_ms')} fps={stats.get('fps')} "
+            f"stale={stats.get('stale')} decoded={stats.get('frames_decoded')} "
+            f"size={stats.get('width')}x{stats.get('height')}"
+        )
         ok = latencies and percentile(latencies, 50) < 100
         print("TARGET MET (p50 < 100ms)" if ok else "TARGET MISSED (p50 >= 100ms)")
         return 0 if ok else 2
