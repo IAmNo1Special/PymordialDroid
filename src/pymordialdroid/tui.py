@@ -517,9 +517,7 @@ class FleetTUI:
         except (EOFError, KeyboardInterrupt):
             name_in = ""
         try:
-            rec = self.commander.add_device(
-                ip=ip, port=port, name=name_in or None
-            )
+            rec = self.commander.add_device(ip=ip, port=port, name=name_in or None)
             self.tui_feedback = f"Added {rec.name} @ {rec.ip}:{rec.port}."
         except Exception as e:
             self.tui_feedback = f"Add failed: {e}"

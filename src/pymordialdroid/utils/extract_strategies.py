@@ -89,9 +89,7 @@ class DefaultExtractStrategy(PymordialExtractStrategy):
                 gray = cv2.GaussianBlur(image, (ksize, ksize), 0)
 
             # 5. Otsu's threshold
-            _, thresh = cv2.threshold(
-                gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
-            )
+            _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
             # 6. Background inversion if dark
             if np.mean(thresh) < 127:

@@ -255,7 +255,9 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", help="Subcommand to execute")
 
     # tui subcommand
-    subparsers.add_parser("tui", help="Launch interactive Fleet Commander TUI dashboard")
+    subparsers.add_parser(
+        "tui", help="Launch interactive Fleet Commander TUI dashboard"
+    )
 
     # list subcommand (aliases: devices, ls)
     subparsers.add_parser(

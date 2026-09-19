@@ -117,9 +117,7 @@ def discover_usb_devices(
                 name = detected
                 if prompt_for_names:
                     try:
-                        user_name = input(
-                            f"  Name for {serial} [{detected}]: "
-                        ).strip()
+                        user_name = input(f"  Name for {serial} [{detected}]: ").strip()
                         if user_name:
                             name = user_name
                     except (EOFError, KeyboardInterrupt):
@@ -196,6 +194,7 @@ def get_local_subnet_bases() -> list[str]:
                         bases.append(base)
                 except Exception:
                     continue
+
         def _sort_key(b: str) -> tuple:
             try:
                 is_private = ipaddress.ip_address(b + ".1").is_private
@@ -317,11 +316,7 @@ async def scan_subnets_for_phones(
                     log.warning(f"  [FAIL] {ip} refused ADB connection.")
             return None
 
-    sweep = {
-        f"{base}.{i}"
-        for base in subnets
-        for i in range(start_host, end_host + 1)
-    }
+    sweep = {f"{base}.{i}" for base in subnets for i in range(start_host, end_host + 1)}
     for ip in extra_ips or []:
         if ip and ip.strip():
             sweep.add(ip.strip())

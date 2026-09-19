@@ -68,7 +68,9 @@ def test_phone_auto_heal_mdns_candidate(tmp_path, mocker, ephemeral_device_recor
 
     mock_tcp = mocker.patch("pymordialdroid.device.AdbDeviceTcpAsync")
     mock_inst = mock_tcp.return_value
-    mock_inst.connect = AsyncMock(side_effect=[ConnectionRefusedError("Port closed"), True])
+    mock_inst.connect = AsyncMock(
+        side_effect=[ConnectionRefusedError("Port closed"), True]
+    )
     mock_inst.close = AsyncMock()
 
     signer = mocker.MagicMock()
@@ -131,7 +133,9 @@ def test_phone_connect_no_auto_heal(tmp_path, mocker, ephemeral_device_record):
     mock_heal.assert_not_called()
 
 
-def test_fleet_heartbeat_persists_on_auto_heal(tmp_path, mocker, ephemeral_device_record):
+def test_fleet_heartbeat_persists_on_auto_heal(
+    tmp_path, mocker, ephemeral_device_record
+):
     """Test that FleetCommander.heartbeat_monitor saves inventory when a device auto-heals."""
     fake_adb = tmp_path / "adb.exe"
     fake_adb.touch()

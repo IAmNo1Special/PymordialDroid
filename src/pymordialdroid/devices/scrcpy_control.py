@@ -527,7 +527,9 @@ class ScrcpyControlClient:
             log.debug("[scrcpy-control] send with no connection")
             return False
         if w is None or h is None:
-            log.error("[scrcpy-control] screen size unknown; call set_screen_size first")
+            log.error(
+                "[scrcpy-control] screen size unknown; call set_screen_size first"
+            )
             return False
         try:
             packet = build_touch_packet(action, pointer_id, x, y, w, h)

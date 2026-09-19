@@ -273,11 +273,11 @@ class ScrcpyLiveStream:
             )
             # Fall back to the adb-binary sibling lookup on non-Windows too.
             if version is None:
-                version = detect_server_version(
-                    Path(self.adb_bin).parent / "scrcpy"
-                )
+                version = detect_server_version(Path(self.adb_bin).parent / "scrcpy")
             if version is None:
-                log.error("Could not detect scrcpy server version; aborting live stream.")
+                log.error(
+                    "Could not detect scrcpy server version; aborting live stream."
+                )
                 return False
             if not self._push_server(deadline):
                 return False
@@ -403,7 +403,9 @@ class ScrcpyLiveStream:
                 s.bind(("127.0.0.1", 0))
                 self._local_port = s.getsockname()[1]
             proc = self._adb(
-                "forward", f"tcp:{self._local_port}", f"localabstract:{self.socket_name}"
+                "forward",
+                f"tcp:{self._local_port}",
+                f"localabstract:{self.socket_name}",
             )
             if proc.returncode != 0:
                 log.error(f"[{self.serial}] ADB forward failed: {proc.stderr!r}")
@@ -531,7 +533,9 @@ class ScrcpyLiveStream:
                 alpha = 0.2
                 prev_ema = self._state.fps_ema
                 self._state.fps_ema = (
-                    instant_fps if prev_ema == 0 else (1 - alpha) * prev_ema + alpha * instant_fps
+                    instant_fps
+                    if prev_ema == 0
+                    else (1 - alpha) * prev_ema + alpha * instant_fps
                 )
             else:
                 self._state.fps_ema = 0.0

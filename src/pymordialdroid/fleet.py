@@ -344,8 +344,12 @@ class FleetCommander:
         connect_tasks = [p.connect(auto_heal=True) for p in self.phones]
         if connect_tasks:
             await asyncio.gather(*connect_tasks)
-            if any(p.record.port != initial_ports.get(p.record.ip) for p in self.phones):
-                log.info("Inventory ports updated after auto-heal. Persisting inventory...")
+            if any(
+                p.record.port != initial_ports.get(p.record.ip) for p in self.phones
+            ):
+                log.info(
+                    "Inventory ports updated after auto-heal. Persisting inventory..."
+                )
                 self.save_inventory()
             try:
                 await self.refresh_placeholder_names()
@@ -447,7 +451,13 @@ class FleetCommander:
                 try:
                     if sys.platform == "win32":
                         res = subprocess.run(
-                            ["tasklist", "/FI", "IMAGENAME eq scrcpy.exe", "/FO", "CSV"],
+                            [
+                                "tasklist",
+                                "/FI",
+                                "IMAGENAME eq scrcpy.exe",
+                                "/FO",
+                                "CSV",
+                            ],
                             capture_output=True,
                             text=True,
                             timeout=5,
@@ -892,9 +902,7 @@ class FleetCommander:
             real_name = await asyncio.to_thread(
                 self._resolve_device_name, ip, 5555, f"{ip}:5555"
             )
-            rec = DeviceRecord(
-                serial=f"{ip}:5555", ip=ip, port=5555, name=real_name
-            )
+            rec = DeviceRecord(serial=f"{ip}:5555", ip=ip, port=5555, name=real_name)
             phone = Phone(
                 record=rec,
                 signer=self.signer,

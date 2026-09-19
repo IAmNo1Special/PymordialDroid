@@ -141,6 +141,7 @@ def parse_touch_device(getevent_output: str) -> TouchDeviceInfo | None:
             candidates.append((node, name, vals))
     if not candidates:
         return None
+
     def _rank(c: tuple[str, str, dict[str, tuple[int, int]]]) -> int:
         n = c[1].lower()
         if "touchscreen" in n:

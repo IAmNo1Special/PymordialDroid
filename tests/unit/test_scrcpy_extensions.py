@@ -36,7 +36,12 @@ def test_open_virtual_display_flags(tmp_path):
         mock_proc = MagicMock()
         mock_proc.poll.return_value = None
         mock_popen.return_value = mock_proc
-        assert device.open_virtual_display(rank=1, display="1920x1080", start_app="com.example") is True
+        assert (
+            device.open_virtual_display(
+                rank=1, display="1920x1080", start_app="com.example"
+            )
+            is True
+        )
         cmd = mock_popen.call_args[0][0]
         assert "--new-display=1920x1080" in cmd
         assert "--no-vd-system-decorations" in cmd
@@ -151,14 +156,20 @@ def test_controller_recording_and_virtual_display(mocker):
     from pymordialdroid.android_controller import AndroidController
 
     controller = AndroidController()
-    mocker.patch.object(controller.scrcpy, "start_recording", return_value=Path("a.mp4"))
+    mocker.patch.object(
+        controller.scrcpy, "start_recording", return_value=Path("a.mp4")
+    )
     assert controller.start_recording() == Path("a.mp4")
     mocker.patch.object(controller.scrcpy, "open_virtual_display", return_value=True)
     assert controller.open_virtual_display() is True
     mock_open = mocker.patch.object(controller.scrcpy, "open", return_value=True)
     controller.open_viewer(rank=2, new_display="1920x1080", start_app="com.x")
     mock_open.assert_called_once_with(
-        rank=2, ghost=False, new_display="1920x1080", start_app="com.x", show_touches=False
+        rank=2,
+        ghost=False,
+        new_display="1920x1080",
+        start_app="com.x",
+        show_touches=False,
     )
 
 
@@ -293,9 +304,7 @@ def test_live_reader_over_socketpair(tmp_path):
     raw = _encode_test_h264()
     blob = tmp_path / "scrcpy-server"
     blob.touch()
-    stream = ScrcpyLiveStream(
-        serial="test:5555", adb_bin="adb", server_blob=blob
-    )
+    stream = ScrcpyLiveStream(serial="test:5555", adb_bin="adb", server_blob=blob)
     srv, cli = socket.socketpair()
     stream._sock = cli
     stream._pending_chunk = raw[:1000]

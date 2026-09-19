@@ -18,7 +18,9 @@ def test_build_parser_subcommands():
     assert args_ls.command == "ls"
 
     # Add
-    args_add = parser.parse_args(["add", "192.168.1.100", "--name", "PhoneA", "--port", "5555", "--pin", "0000"])
+    args_add = parser.parse_args(
+        ["add", "192.168.1.100", "--name", "PhoneA", "--port", "5555", "--pin", "0000"]
+    )
     assert args_add.command == "add"
     assert args_add.device == "192.168.1.100"
     assert args_add.name == "PhoneA"
@@ -60,7 +62,9 @@ def test_cmd_add_and_list(mocker, tmp_path):
 
     # Add device via cmd_add
     parser = build_parser()
-    args_add = parser.parse_args(["add", "192.168.1.50:5555", "--name", "TestDevice", "--pin", "9999"])
+    args_add = parser.parse_args(
+        ["add", "192.168.1.50:5555", "--name", "TestDevice", "--pin", "9999"]
+    )
     cmd_add(args_add)
 
     assert len(mock_fc.phones) == 1

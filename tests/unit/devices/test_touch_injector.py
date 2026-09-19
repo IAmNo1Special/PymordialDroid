@@ -81,7 +81,6 @@ add device 1: /dev/input/event8
 """
 
 
-
 def make_runner(script):
     """Builds a fake run_command dispatching on command prefix; records calls."""
     calls = []

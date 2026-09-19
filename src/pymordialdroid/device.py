@@ -170,7 +170,9 @@ class Phone:
             self._connected = True
             self.status = "Online"
             self.last_action = "Auto-Healed (Port 5555)"
-            log.info(f"[{self.record.name}] Auto-heal succeeded! Connected on port 5555.")
+            log.info(
+                f"[{self.record.name}] Auto-heal succeeded! Connected on port 5555."
+            )
             return True
 
         except Exception as e:
@@ -548,7 +550,11 @@ class Phone:
                 extra_args.append("--no-vd-system-decorations")
         if start_app:
             extra_args.append(f"--start-app={start_app}")
-        if show_touches and "--show-touches" not in extra_args and "-t" not in extra_args:
+        if (
+            show_touches
+            and "--show-touches" not in extra_args
+            and "-t" not in extra_args
+        ):
             extra_args.append("--show-touches")
 
         # Ensure ADB daemon knows the network endpoint

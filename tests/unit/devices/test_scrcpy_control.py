@@ -393,8 +393,12 @@ def make_injector(tmp_path, screen=(2340, 1080)):
     blob.write_bytes(b"fake-jar")
     fake = FakeClient(blob, screen)
     inj = ScrcpyControlInjector(
-        "/fake/adb", "127.0.0.1:5555", blob, client=fake,
-        screen_width=screen[0], screen_height=screen[1],
+        "/fake/adb",
+        "127.0.0.1:5555",
+        blob,
+        client=fake,
+        screen_width=screen[0],
+        screen_height=screen[1],
     )
     return inj, fake
 
@@ -415,7 +419,9 @@ def test_injector_available_requires_blob(tmp_path):
     assert inj.available is True
     missing = tmp_path / "nope" / "scrcpy-server"
     inj2 = ScrcpyControlInjector(
-        "/fake/adb", "s", missing,
+        "/fake/adb",
+        "s",
+        missing,
         client=FakeClient(missing),
     )
     assert inj2.available is False
@@ -470,7 +476,10 @@ def test_injector_negative_slot_rejected(tmp_path):
 
 def _adb_with(script, **kwargs):
     adb = AdbDevice(
-        host="127.0.0.1", port=5555, system_config=MagicMock(), signer=MagicMock(),
+        host="127.0.0.1",
+        port=5555,
+        system_config=MagicMock(),
+        signer=MagicMock(),
         **kwargs,
     )
     calls = []
