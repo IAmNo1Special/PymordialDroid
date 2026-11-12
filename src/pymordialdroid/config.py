@@ -61,12 +61,34 @@ class SystemConfig(BaseModel):
         return PythonRSASigner(pub, priv)
 
 
+def _bundled_or_downloaded(exe: str, name: str) -> Path:
+    """Resolve a binary: bundled copy, cached download, or first-run download.
+
+    Checks, in order: the legacy bundled location under the package, the
+    ``~/.pymordialdroid/bin/`` cache from a previous download, and finally
+    the first-run downloader (issue #1). Raises BinaryDownloadError (with
+    manual-install instructions) when no binary is available and the
+    download fails.
+    """
+    base_dir = Path(__file__).resolve().parent
+    bundled = base_dir / "bin" / "scrcpy" / exe
+    if bundled.exists():
+        return bundled
+    # Local import: binary_fetch imports DATA_DIR from this module.
+    from .binary_fetch import BIN_DIR, ensure_binary, is_binary_current
+
+    cached = BIN_DIR / exe
+    if cached.exists() and is_binary_current(name):
+        return cached
+    return ensure_binary(name)
+
+
 def resolve_system_config(
     adb_override: Path | str | None = None,
     scrcpy_override: Path | str | None = None,
     tesseract_override: Path | str | None = None,
 ) -> SystemConfig:
-    """Resolves ADB, Scrcpy, and Tesseract paths using overrides, config.json, or bundled binaries."""
+    """Resolves ADB, Scrcpy, and Tesseract paths using overrides, config.json, bundled binaries, or first-run download."""
     base_dir = Path(__file__).resolve().parent
     adb_exe = "adb.exe" if sys.platform == "win32" else "adb"
     scrcpy_exe = "scrcpy.exe" if sys.platform == "win32" else "scrcpy"
@@ -78,12 +100,12 @@ def resolve_system_config(
     tesseract_path_val = tesseract_override or app_config.get("tesseract_path")
 
     resolved_adb = (
-        Path(adb_path_val) if adb_path_val else base_dir / "bin" / "scrcpy" / adb_exe
+        Path(adb_path_val) if adb_path_val else _bundled_or_downloaded(adb_exe, "adb")
     )
     resolved_scrcpy = (
         Path(scrcpy_path_val)
         if scrcpy_path_val
-        else base_dir / "bin" / "scrcpy" / scrcpy_exe
+        else _bundled_or_downloaded(scrcpy_exe, "scrcpy")
     )
 
     resolved_tesseract: Path | None = None
