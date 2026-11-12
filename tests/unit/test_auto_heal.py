@@ -211,3 +211,103 @@ def test_adb_device_sync_auto_heal(tmp_path, mocker):
 
     assert ok is True
     assert adb_dev.port == 5555
+
+
+def test_adb_device_sync_auto_heal_mdns_candidate(tmp_path, mocker):
+    """Sync heal finds an attached mDNS device and enables tcpip 5555 through it.
+
+    Parity with Phone._try_auto_heal_tcpip: a phone that dropped off after a
+    reboot or Wi-Fi reconnect is reachable again via its mDNS channel even
+    when the recorded IP:5555 endpoint is not listening yet.
+    """
+    fake_adb = tmp_path / "adb.exe"
+    fake_adb.touch()
+
+    mock_cfg = mocker.MagicMock()
+    mock_cfg.adb_bin_path = fake_adb
+    mock_signer = mocker.MagicMock()
+
+    adb_dev = AdbDevice(
+        host="172.20.8.50",
+        port=42759,
+        signer=mock_signer,
+        system_config=mock_cfg,
+    )
+
+    mdns_output = (
+        "List of devices attached\n"
+        "adb-R5CX51P0AMK-2QBiR4._adb-tls-connect._tcp device product:e3qsqw\n"
+    )
+    ip_output = "172.20.0.0/16 dev wlan0 proto kernel scope link src 172.20.8.50\n"
+    seen_cmds = []
+
+    def fake_subprocess_run(cmd, **kwargs):
+        cmd_str = " ".join(str(c) for c in cmd)
+        seen_cmds.append(cmd_str)
+        res = mocker.MagicMock()
+        res.returncode = 0
+        if "devices -l" in cmd_str:
+            res.stdout = mdns_output
+        elif "shell ip route" in cmd_str:
+            res.stdout = ip_output
+        else:
+            res.stdout = ""
+        return res
+
+    mocker.patch("subprocess.run", side_effect=fake_subprocess_run)
+
+    mock_tcp = mocker.patch("pymordialdroid.devices.adb_device.AdbDeviceTcp")
+    tcp_instance = mock_tcp.return_value
+    tcp_instance.available = False
+    tcp_instance.connect.side_effect = [
+        InvalidCommandError("STLS"),
+        None,
+    ]
+
+    ok = adb_dev.connect(auto_heal=True)
+
+    assert ok is True
+    assert adb_dev.port == 5555
+    assert any("devices -l" in c for c in seen_cmds)
+    assert any(
+        "adb-R5CX51P0AMK-2QBiR4._adb-tls-connect._tcp tcpip 5555" in c
+        for c in seen_cmds
+    )
+
+
+def test_adb_device_sync_auto_heal_keeps_port_on_failure(tmp_path, mocker):
+    """A failed sync heal leaves the recorded port untouched.
+
+    Previously the port was switched to 5555 before the new connection was
+    attempted, so a failed heal corrupted the record for the next attempt.
+    """
+    fake_adb = tmp_path / "adb.exe"
+    fake_adb.touch()
+
+    mock_cfg = mocker.MagicMock()
+    mock_cfg.adb_bin_path = fake_adb
+    mock_signer = mocker.MagicMock()
+
+    adb_dev = AdbDevice(
+        host="172.20.8.50",
+        port=42759,
+        signer=mock_signer,
+        system_config=mock_cfg,
+    )
+
+    mocker.patch(
+        "subprocess.run",
+        return_value=mocker.MagicMock(
+            returncode=0, stdout="List of devices attached\n"
+        ),
+    )
+
+    mock_tcp = mocker.patch("pymordialdroid.devices.adb_device.AdbDeviceTcp")
+    tcp_instance = mock_tcp.return_value
+    tcp_instance.available = False
+    tcp_instance.connect.side_effect = ConnectionRefusedError("Port closed")
+
+    ok = adb_dev.connect(auto_heal=True)
+
+    assert ok is False
+    assert adb_dev.port == 42759

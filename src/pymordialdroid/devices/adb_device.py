@@ -79,7 +79,15 @@ class AdbDevice(PymordialBridgeDevice):
     # --- CONNECTION MANAGEMENT ---
 
     def _try_auto_heal_tcpip(self) -> bool:
-        """Attempts to auto-heal synchronous ADB connection via CLI binary."""
+        """Attempts to auto-heal synchronous ADB connection via CLI binary.
+
+        Mirrors the async Phone heal: after switching a dynamic TLS port back
+        to 5555, scans `adb devices -l` for an attached mDNS or USB channel
+        to this host and enables tcpip 5555 through it, so a phone that
+        dropped off after a reboot or Wi-Fi reconnect can come back without
+        the user re-running setup by hand. The port is only switched to 5555
+        after the new connection actually succeeds.
+        """
         import subprocess
 
         adb_bin = str(self.system_config.adb_bin_path)
@@ -102,6 +110,47 @@ class AdbDevice(PymordialBridgeDevice):
                     check=False,
                 )
 
+            # Scan attached devices for an mDNS or USB channel to this host
+            # (parity with Phone._try_auto_heal_tcpip step 2).
+            devices_res = subprocess.run(
+                [adb_bin, "devices", "-l"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            if devices_res.returncode == 0:
+                for line in devices_res.stdout.strip().splitlines()[1:]:
+                    parts = line.split()
+                    if not parts or parts[1] != "device":
+                        continue
+                    serial = parts[0]
+                    is_candidate = (
+                        self.host in serial
+                        or serial.endswith("._adb-tls-connect._tcp")
+                        or not (":" in serial or "._" in serial)
+                    )
+                    if is_candidate:
+                        ip_res = subprocess.run(
+                            [adb_bin, "-s", serial, "shell", "ip", "route"],
+                            capture_output=True,
+                            text=True,
+                            timeout=5,
+                            check=False,
+                        )
+                        if self.host in ip_res.stdout:
+                            log.info(
+                                f"Matched attached device {serial} for IP {self.host}. Enabling tcpip 5555..."
+                            )
+                            subprocess.run(
+                                [adb_bin, "-s", serial, "tcpip", "5555"],
+                                capture_output=True,
+                                text=True,
+                                timeout=5,
+                                check=False,
+                            )
+                            break
+
             subprocess.run(
                 [adb_bin, "connect", f"{self.host}:5555"],
                 capture_output=True,
@@ -110,9 +159,10 @@ class AdbDevice(PymordialBridgeDevice):
                 check=False,
             )
 
+            new_device = AdbDeviceTcp(self.host, 5555, default_transport_timeout_s=9)
+            new_device.connect(rsa_keys=[self.signer], auth_timeout_s=5)
+            self._device = new_device
             self.port = 5555
-            self._device = AdbDeviceTcp(self.host, 5555, default_transport_timeout_s=9)
-            self._device.connect(rsa_keys=[self.signer], auth_timeout_s=5)
             log.info(f"Auto-healed ADB connection to {self.host}:5555")
             return True
         except Exception as e:
