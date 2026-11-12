@@ -71,15 +71,34 @@ class Phone:
 
     @property
     def controller(self):
-        """Returns the AndroidController instance for this device."""
+        """Returns the AndroidController instance for this device.
+
+        The controller is bound to the record's port, so when an auto-heal
+        (or a fleet update) moves the device to a new port, the controller
+        is rebuilt for that port. The retired controller is shut down
+        first — otherwise its live stream, headless feed, and recording
+        keep running with no handle left to stop them — and any apps
+        registered on it are carried over, re-pointed at the new
+        controller.
+        """
         if self._controller is None or self._controller.port != self.record.port:
             from pymordialdroid.android_controller import AndroidController
 
+            old = self._controller
+            apps = list(old.apps.values()) if old is not None else []
+            if old is not None:
+                try:
+                    old.shutdown()
+                except Exception as e:
+                    log.debug(
+                        f"[{self.record.name}] Old controller shutdown failed: {e}"
+                    )
             self._controller = AndroidController(
                 ip=self.record.ip,
                 port=self.record.port,
                 device_name=self.record.name,
                 pin=self.record.pin,
+                apps=apps or None,
             )
         return self._controller
 

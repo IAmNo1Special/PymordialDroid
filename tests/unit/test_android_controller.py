@@ -39,6 +39,35 @@ def test_controller_app_registration():
     assert app.pymordial_controller is controller
 
 
+def test_controller_shutdown_stops_devices(mocker):
+    """shutdown() stops scrcpy + adb and clears the frame provider."""
+    controller = AndroidController()
+    scrcpy = mocker.MagicMock()
+    adb = mocker.MagicMock()
+    controller.scrcpy = scrcpy
+    controller.adb = adb
+
+    controller.shutdown()
+
+    scrcpy.shutdown.assert_called_once()
+    adb.clear_frame_provider.assert_called_once()
+    adb.shutdown.assert_called_once()
+
+
+def test_controller_shutdown_tolerates_device_errors(mocker):
+    """One device failing to shut down must not block the other."""
+    controller = AndroidController()
+    scrcpy = mocker.MagicMock()
+    scrcpy.shutdown.side_effect = RuntimeError("scrcpy already gone")
+    adb = mocker.MagicMock()
+    controller.scrcpy = scrcpy
+    controller.adb = adb
+
+    controller.shutdown()  # must not raise
+
+    adb.shutdown.assert_called_once()
+
+
 def test_controller_ocr_and_extended_delegations(mocker):
     """Test controller delegates gestures, commands, and exposes OCR."""
     controller = AndroidController()

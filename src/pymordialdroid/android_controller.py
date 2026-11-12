@@ -530,6 +530,39 @@ class AndroidController(PymordialController):
         """Unlocks device screen with PIN."""
         self.scrcpy.unlock_device(pin=pin)
 
+    # --- Lifecycle ---
+
+    def shutdown(self) -> None:
+        """Stops this controller's devices and releases their resources.
+
+        Terminates the scrcpy viewer, live stream, and any headless
+        recording, clears the ADB frame provider, and disconnects ADB.
+        Best-effort per device: one device failing to shut down must not
+        block the other.
+
+        Called when this controller is retired — e.g. :class:`Phone`
+        rebuilds its controller after an auto-heal port change. Without
+        it, the retired controller's live stream and recording keep running
+        with no handle left to stop them.
+        """
+        scrcpy = getattr(self, "scrcpy", None)
+        if scrcpy is not None:
+            try:
+                scrcpy.shutdown()
+            except Exception as e:
+                log.debug(f"Error shutting down scrcpy device: {e}")
+        adb = getattr(self, "adb", None)
+        if adb is not None:
+            try:
+                if hasattr(adb, "clear_frame_provider"):
+                    adb.clear_frame_provider()
+            except Exception:
+                pass
+            try:
+                adb.shutdown()
+            except Exception as e:
+                log.debug(f"Error shutting down adb device: {e}")
+
 
 __all__ = [
     "AndroidController",
